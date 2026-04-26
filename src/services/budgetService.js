@@ -1,0 +1,1093 @@
+import {
+  INIT_AI_INSIGHTS,
+  INIT_CATS,
+  INIT_GOAL_CONTRIBUTIONS,
+  INIT_GOALS,
+  INIT_RECURRING_RULES,
+  INIT_TXS,
+  LEGACY_DEMO_DESCRIPTIONS,
+  LEGACY_RECURRING_RULES,
+} from "../constants/seedData"
+import { supabase } from "../lib/supabase"
+
+const toCategory = (row) => ({
+  id: row.id,
+  name: row.name,
+  color: row.color,
+  isIncome: row.is_income,
+  budget: Number(row.monthly_budget || 0),
+  icon: row.icon || (row.is_income ? "Gelir" : "Gider"),
+  isArchived: Boolean(row.is_archived),
+})
+
+const toTransaction = (row) => ({
+  id: row.id,
+  type: row.type,
+  amount: Number(row.amount || 0),
+  date: row.transaction_date,
+  cat: row.category_id,
+  desc: row.description || "",
+  paymentMethod: row.payment_method || "Kart",
+  tags: Array.isArray(row.tags) ? row.tags : [],
+  source: row.source || "manual",
+  recurringRuleId: row.recurring_rule_id || null,
+})
+
+const fromCategory = (category, userId) => ({
+  user_id: userId,
+  name: category.name,
+  color: category.color,
+  is_income: category.isIncome,
+  monthly_budget: category.budget || 0,
+  icon: category.icon || (category.isIncome ? "Gelir" : "Gider"),
+  is_archived: Boolean(category.isArchived),
+})
+
+const fromTransaction = (transaction, userId) => ({
+  user_id: userId,
+  category_id: transaction.cat,
+  type: transaction.type,
+  amount: transaction.amount,
+  transaction_date: transaction.date,
+  description: transaction.desc || null,
+  payment_method: transaction.paymentMethod || "Kart",
+  tags: transaction.tags || [],
+  source: transaction.source || "manual",
+  recurring_rule_id: transaction.recurringRuleId || null,
+})
+
+const fromLegacyTransaction = (transaction, userId) => ({
+  user_id: userId,
+  category_id: transaction.cat,
+  type: transaction.type,
+  amount: transaction.amount,
+  transaction_date: transaction.date,
+  description: transaction.desc || null,
+})
+
+const toGoal = (row) => ({
+  id: row.id,
+  name: row.name,
+  targetAmount: Number(row.target_amount || 0),
+  currentAmount: Number(row.current_amount || 0),
+  targetDate: row.target_date || "",
+  color: row.color || "#10b981",
+  isArchived: Boolean(row.is_archived),
+})
+
+const fromGoal = (goal, userId) => ({
+  user_id: userId,
+  name: goal.name,
+  target_amount: goal.targetAmount || 0,
+  current_amount: goal.currentAmount || 0,
+  target_date: goal.targetDate || null,
+  color: goal.color || "#10b981",
+  is_archived: Boolean(goal.isArchived),
+})
+
+const toContribution = (row) => ({
+  id: row.id,
+  goalId: row.goal_id,
+  amount: Number(row.amount || 0),
+  date: row.contribution_date,
+  note: row.note || "",
+})
+
+const toRecurringRule = (row) => ({
+  id: row.id,
+  name: row.name,
+  type: row.type,
+  amount: Number(row.amount || 0),
+  cat: row.category_id,
+  frequency: row.frequency,
+  dayOfMonth: row.day_of_month || 1,
+  nextDate: row.next_date,
+  desc: row.description || "",
+  paymentMethod: row.payment_method || "Kart",
+  isActive: Boolean(row.is_active),
+})
+
+const fromRecurringRule = (rule, userId) => ({
+  user_id: userId,
+  name: rule.name,
+  type: rule.type,
+  amount: rule.amount || 0,
+  category_id: rule.cat,
+  frequency: rule.frequency || "monthly",
+  day_of_month: rule.dayOfMonth || 1,
+  next_date: rule.nextDate,
+  description: rule.desc || null,
+  payment_method: rule.paymentMethod || "Kart",
+  is_active: rule.isActive !== false,
+})
+
+const toAiInsight = (row) => ({
+  id: row.id,
+  type: row.type,
+  title: row.title,
+  body: row.body,
+  severity: row.severity || "info",
+  createdAt: row.created_at,
+})
+
+const toAiMessage = (row) => ({
+  id: row.id,
+  role: row.role,
+  content: row.content,
+  createdAt: row.created_at,
+})
+
+const isSchemaMissing = (error) => {
+  const message = error?.message || ""
+  return (
+    message.includes("schema cache") ||
+    message.includes("relation") ||
+    message.includes("column") ||
+    error?.code === "42P01" ||
+    error?.code === "42703" ||
+    error?.code === "PGRST204"
+  )
+}
+
+const optionalRows = (result) => {
+  if (!result.error) return result.data || []
+  if (isSchemaMissing(result.error)) return []
+  throw result.error
+}
+
+const monthKey = (date) => date.slice(0, 7)
+
+const shiftedSeedDate = (date, monthMap) => {
+  const nextMonth = monthMap.get(monthKey(date))
+  return nextMonth ? `${nextMonth}-${date.slice(8, 10)}` : date
+}
+
+const buildSeedMonthMap = () => {
+  const sourceMonths = [...new Set(INIT_TXS.map((transaction) => monthKey(transaction.date)))].sort()
+  const targetMonths = Array.from({ length: sourceMonths.length }, (_, index) => {
+    const date = new Date()
+    date.setDate(1)
+    date.setMonth(date.getMonth() - (sourceMonths.length - 1 - index))
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+  })
+
+  return new Map(sourceMonths.map((sourceMonth, index) => [sourceMonth, targetMonths[index]]))
+}
+
+const futureDate = (monthsFromNow, day = 1) => {
+  const date = new Date()
+  date.setDate(day)
+  date.setMonth(date.getMonth() + monthsFromNow)
+  return date.toISOString().slice(0, 10)
+}
+
+const dateOffset = (daysFromToday) => {
+  const date = new Date()
+  date.setDate(date.getDate() + daysFromToday)
+  return date.toISOString().slice(0, 10)
+}
+
+const advanceRecurringDate = (dateString, frequency) => {
+  const date = new Date(`${dateString}T12:00:00`)
+  if (frequency === "weekly") date.setDate(date.getDate() + 7)
+  else date.setMonth(date.getMonth() + 1)
+  return date.toISOString().slice(0, 10)
+}
+
+async function ensureProfile(user) {
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  if (error) throw error
+  if (profile) return profile
+
+  const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "BudgetFlow"
+  const { data, error: insertError } = await supabase
+    .from("profiles")
+    .insert({
+      user_id: user.id,
+      display_name: displayName,
+      currency: "TRY",
+    })
+    .select()
+    .single()
+
+  if (insertError) throw insertError
+  return data
+}
+
+async function seedUserData(userId) {
+  const categoryIdMap = new Map()
+  const seedMonthMap = buildSeedMonthMap()
+
+  for (const category of INIT_CATS) {
+    const data = await insertSeedCategory(userId, category)
+    categoryIdMap.set(category.id, data.id)
+  }
+
+  await insertSeedTransactions(userId, categoryIdMap, seedMonthMap, [])
+
+  await seedPresentationData(userId, categoryIdMap)
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ seeded_at: new Date().toISOString() })
+    .eq("user_id", userId)
+
+  if (error) throw error
+}
+
+async function insertSeedCategory(userId, category) {
+  let { data, error } = await supabase
+    .from("categories")
+    .insert(fromCategory(category, userId))
+    .select()
+    .single()
+
+  if (error && isSchemaMissing(error)) {
+    const legacy = await supabase
+      .from("categories")
+      .insert({
+        user_id: userId,
+        name: category.name,
+        color: category.color,
+        is_income: category.isIncome,
+        monthly_budget: category.budget || 0,
+      })
+      .select()
+      .single()
+    data = legacy.data
+    error = legacy.error
+  }
+
+  if (error) throw error
+  return data
+}
+
+async function insertSeedTransactions(userId, categoryIdMap, seedMonthMap, existingTransactions) {
+  const existingDescriptions = new Set(existingTransactions.map((tx) => tx.description || tx.desc))
+  const seededTransactions = INIT_TXS
+    .filter((transaction) => !existingDescriptions.has(transaction.desc))
+    .map((transaction) =>
+      fromTransaction(
+        {
+          ...transaction,
+          cat: categoryIdMap.get(transaction.cat),
+          date: shiftedSeedDate(transaction.date, seedMonthMap),
+        },
+        userId
+      )
+    )
+    .filter((transaction) => transaction.category_id)
+
+  if (seededTransactions.length === 0) return
+
+  let { error } = await supabase.from("transactions").insert(seededTransactions)
+
+  if (error && isSchemaMissing(error)) {
+    const legacyRows = seededTransactions.map((transaction) => ({
+      user_id: transaction.user_id,
+      category_id: transaction.category_id,
+      type: transaction.type,
+      amount: transaction.amount,
+      transaction_date: transaction.transaction_date,
+      description: transaction.description,
+    }))
+    const legacy = await supabase.from("transactions").insert(legacyRows)
+    error = legacy.error
+  }
+
+  if (error) throw error
+}
+
+async function ensureCoreDemoData(userId, categories, transactions) {
+  const categoryIdMap = new Map()
+  for (const category of INIT_CATS) {
+    const match = categories.find((item) => item.name === category.name)
+    if (match) {
+      categoryIdMap.set(category.id, match.id)
+      continue
+    }
+
+    const inserted = await insertSeedCategory(userId, category)
+    categoryIdMap.set(category.id, inserted.id)
+  }
+
+  if (transactions.length < INIT_TXS.length) {
+    await insertSeedTransactions(userId, categoryIdMap, buildSeedMonthMap(), transactions)
+  }
+}
+
+async function pruneLegacyDemoTransactions(userId, profile, transactions) {
+  if (!profile?.seeded_at || transactions.length <= INIT_TXS.length + 4) return false
+
+  const keepDescriptions = new Set(INIT_TXS.map((tx) => tx.desc))
+  const removableDescriptions = new Set(
+    LEGACY_DEMO_DESCRIPTIONS.filter((desc) => !keepDescriptions.has(desc))
+  )
+  const removableIds = transactions
+    .filter((tx) => removableDescriptions.has(tx.description || tx.desc))
+    .map((tx) => tx.id)
+
+  if (removableIds.length === 0) return false
+
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("user_id", userId)
+    .in("id", removableIds)
+
+  if (error) throw error
+  return true
+}
+
+async function seedPresentationData(userId, categoryIdMap) {
+  const goalIdMap = new Map()
+
+  const { data: goals, error: goalError } = await supabase
+    .from("goals")
+    .insert(
+      INIT_GOALS.map((goal) => ({
+        user_id: userId,
+        name: goal.name,
+        target_amount: goal.targetAmount,
+        current_amount: goal.currentAmount,
+        target_date: futureDate(goal.targetDateOffsetMonths, 1),
+        color: goal.color,
+      }))
+    )
+    .select()
+
+  if (goalError) {
+    if (isSchemaMissing(goalError)) return
+    throw goalError
+  }
+
+  INIT_GOALS.forEach((goal, index) => {
+    if (goals?.[index]?.id) goalIdMap.set(goal.id, goals[index].id)
+  })
+
+  const contributionRows = INIT_GOAL_CONTRIBUTIONS
+    .map((item) => ({
+      user_id: userId,
+      goal_id: goalIdMap.get(item.goal),
+      amount: item.amount,
+      contribution_date: dateOffset(item.dateOffsetDays),
+      note: item.note,
+    }))
+    .filter((item) => item.goal_id)
+
+  if (contributionRows.length > 0) {
+    const { error } = await supabase.from("goal_contributions").insert(contributionRows)
+    if (error && !isSchemaMissing(error)) throw error
+  }
+
+  const recurringRows = INIT_RECURRING_RULES
+    .map((rule) => ({
+      user_id: userId,
+      name: rule.name,
+      type: rule.type,
+      amount: rule.amount,
+      category_id: categoryIdMap.get(rule.cat),
+      frequency: rule.frequency,
+      day_of_month: rule.dayOfMonth,
+      next_date: futureDate(1, rule.dayOfMonth),
+      description: rule.desc,
+      payment_method: rule.paymentMethod,
+      is_active: true,
+    }))
+    .filter((rule) => rule.category_id)
+
+  if (recurringRows.length > 0) {
+    const { error } = await supabase.from("recurring_rules").insert(recurringRows)
+    if (error && !isSchemaMissing(error)) throw error
+  }
+
+  const { error: insightError } = await supabase.from("ai_insights").insert(
+    INIT_AI_INSIGHTS.map((insight) => ({
+      user_id: userId,
+      type: insight.type,
+      title: insight.title,
+      body: insight.body,
+      severity: insight.severity,
+    }))
+  )
+  if (insightError && !isSchemaMissing(insightError)) throw insightError
+
+  const { error: messageError } = await supabase.from("ai_messages").insert([
+    {
+      user_id: userId,
+      role: "assistant",
+      content:
+        "Demo veriniz hazır. Şimdilik yerel analiz modundayım; OpenAI Edge Function bağlandığında daha derin kişisel öneriler verebilirim.",
+    },
+  ])
+  if (messageError && !isSchemaMissing(messageError)) throw messageError
+}
+
+async function ensurePresentationData(userId, categories, rows) {
+  if (categories.length === 0) return rows
+  const hasPresentationData =
+    rows.goalRows.length > 0 ||
+    rows.recurringRows.length > 0 ||
+    rows.insightRows.length > 0
+
+  if (hasPresentationData) return rows
+
+  const categoryIdMap = new Map()
+  INIT_CATS.forEach((seedCat) => {
+    const match = categories.find((cat) => cat.name === seedCat.name)
+    if (match) categoryIdMap.set(seedCat.id, match.id)
+  })
+
+  if (categoryIdMap.size === 0) return rows
+
+  await seedPresentationData(userId, categoryIdMap)
+
+  const [goalsResult, contributionsResult, recurringResult, insightsResult, messagesResult] = await Promise.all([
+    supabase.from("goals").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
+    supabase.from("goal_contributions").select("*").eq("user_id", userId).order("contribution_date", { ascending: false }),
+    supabase.from("recurring_rules").select("*").eq("user_id", userId).order("next_date", { ascending: true }),
+    supabase.from("ai_insights").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(8),
+    supabase.from("ai_messages").select("*").eq("user_id", userId).order("created_at", { ascending: true }).limit(50),
+  ])
+
+  return {
+    goalRows: optionalRows(goalsResult),
+    contributionRows: optionalRows(contributionsResult),
+    recurringRows: optionalRows(recurringResult),
+    insightRows: optionalRows(insightsResult),
+    messageRows: optionalRows(messagesResult),
+  }
+}
+
+async function ensureSubscriptionRules(userId, categories, recurringRows) {
+  const legacyNames = new Set(LEGACY_RECURRING_RULES)
+  const legacyRows = recurringRows.filter((row) => legacyNames.has(row.name))
+  if (legacyRows.length > 0) {
+    const { error } = await supabase
+      .from("recurring_rules")
+      .delete()
+      .eq("user_id", userId)
+      .in("id", legacyRows.map((row) => row.id))
+    if (error) throw error
+    recurringRows = recurringRows.filter((row) => !legacyNames.has(row.name))
+  }
+
+  const categoryIdMap = new Map()
+  INIT_CATS.forEach((seedCat) => {
+    const match = categories.find((cat) => cat.name === seedCat.name)
+    if (match) categoryIdMap.set(seedCat.id, match.id)
+  })
+
+  const existingNames = new Set(recurringRows.map((row) => row.name))
+  const missingRows = INIT_RECURRING_RULES
+    .filter((rule) => !existingNames.has(rule.name))
+    .map((rule) => ({
+      user_id: userId,
+      name: rule.name,
+      type: rule.type,
+      amount: rule.amount,
+      category_id: categoryIdMap.get(rule.cat),
+      frequency: rule.frequency,
+      day_of_month: rule.dayOfMonth,
+      next_date: futureDate(1, rule.dayOfMonth),
+      description: rule.desc,
+      payment_method: rule.paymentMethod,
+      is_active: true,
+    }))
+    .filter((rule) => rule.category_id)
+
+  if (missingRows.length === 0) return recurringRows
+
+  const { data, error } = await supabase
+    .from("recurring_rules")
+    .insert(missingRows)
+    .select("*")
+
+  if (error && !isSchemaMissing(error)) throw error
+  return [...recurringRows, ...optionalRows({ data, error })]
+}
+
+async function materializeDueRecurringRules(userId, recurringRows, transactionRows) {
+  const today = new Date().toISOString().slice(0, 10)
+  const existingKeys = new Set(
+    transactionRows
+      .filter((tx) => tx.recurring_rule_id)
+      .map((tx) => `${tx.recurring_rule_id}:${tx.transaction_date}`)
+  )
+  const createdRows = []
+  const updates = []
+
+  for (const row of recurringRows.filter((rule) => rule.is_active && rule.next_date <= today)) {
+    let nextDate = row.next_date
+    let guard = 0
+
+    while (nextDate <= today && guard < 24) {
+      const key = `${row.id}:${nextDate}`
+      if (!existingKeys.has(key)) {
+        const payload = {
+          user_id: userId,
+          category_id: row.category_id,
+          type: row.type,
+          amount: row.amount,
+          transaction_date: nextDate,
+          description: row.description || row.name,
+          payment_method: row.payment_method || "Kart",
+          tags: ["tekrarlı", "otomatik"],
+          source: "recurring",
+          recurring_rule_id: row.id,
+        }
+        const { data, error } = await supabase.from("transactions").insert(payload).select().single()
+        if (error) throw error
+        createdRows.push(data)
+        existingKeys.add(key)
+      }
+      nextDate = advanceRecurringDate(nextDate, row.frequency)
+      guard += 1
+    }
+
+    if (nextDate !== row.next_date) {
+      updates.push({ id: row.id, nextDate })
+    }
+  }
+
+  for (const update of updates) {
+    const { error } = await supabase
+      .from("recurring_rules")
+      .update({ next_date: update.nextDate })
+      .eq("id", update.id)
+      .eq("user_id", userId)
+    if (error) throw error
+  }
+
+  return createdRows.length
+}
+
+export async function loadBudgetData(user) {
+  const profile = await ensureProfile(user)
+
+  const { count, error: countError } = await supabase
+    .from("categories")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+
+  if (countError) throw countError
+
+  if (!profile.seeded_at && count === 0) {
+    await seedUserData(user.id)
+  }
+
+  let [
+    categoriesResult,
+    transactionsResult,
+    profileResult,
+    goalsResult,
+    contributionsResult,
+    recurringResult,
+    insightsResult,
+    messagesResult,
+  ] = await Promise.all([
+    supabase
+      .from("categories")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("transactions")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("transaction_date", { ascending: false })
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("profiles")
+      .select("*")
+      .eq("user_id", user.id)
+      .single(),
+    supabase
+      .from("goals")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("goal_contributions")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("contribution_date", { ascending: false }),
+    supabase
+      .from("recurring_rules")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("next_date", { ascending: true }),
+    supabase
+      .from("ai_insights")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(8),
+    supabase
+      .from("ai_messages")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(50),
+  ])
+
+  if (categoriesResult.error) throw categoriesResult.error
+  if (transactionsResult.error) throw transactionsResult.error
+  if (profileResult.error) throw profileResult.error
+
+  const prunedLegacyRows = await pruneLegacyDemoTransactions(user.id, profileResult.data, transactionsResult.data)
+  if (prunedLegacyRows) {
+    const nextTransactionsResult = await supabase
+      .from("transactions")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("transaction_date", { ascending: false })
+      .order("created_at", { ascending: false })
+
+    if (nextTransactionsResult.error) throw nextTransactionsResult.error
+    transactionsResult = nextTransactionsResult
+  }
+
+  if (categoriesResult.data.length < INIT_CATS.length || transactionsResult.data.length < INIT_TXS.length) {
+    await ensureCoreDemoData(user.id, categoriesResult.data, transactionsResult.data)
+    const [nextCategoriesResult, nextTransactionsResult] = await Promise.all([
+      supabase.from("categories").select("*").eq("user_id", user.id).order("created_at", { ascending: true }),
+      supabase
+        .from("transactions")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("transaction_date", { ascending: false })
+        .order("created_at", { ascending: false }),
+    ])
+
+    if (nextCategoriesResult.error) throw nextCategoriesResult.error
+    if (nextTransactionsResult.error) throw nextTransactionsResult.error
+    categoriesResult = nextCategoriesResult
+    transactionsResult = nextTransactionsResult
+  }
+
+  const createdRecurringCount = await materializeDueRecurringRules(
+    user.id,
+    optionalRows(recurringResult),
+    transactionsResult.data
+  )
+
+  if (createdRecurringCount > 0) {
+    const [nextTransactionsResult, nextRecurringResult] = await Promise.all([
+      supabase
+        .from("transactions")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("transaction_date", { ascending: false })
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("recurring_rules")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("next_date", { ascending: true }),
+    ])
+
+    if (nextTransactionsResult.error) throw nextTransactionsResult.error
+    if (nextRecurringResult.error) throw nextRecurringResult.error
+    transactionsResult = nextTransactionsResult
+    recurringResult = nextRecurringResult
+  }
+
+  const goalRows = optionalRows(goalsResult)
+  const contributionRows = optionalRows(contributionsResult)
+  let recurringRows = optionalRows(recurringResult)
+  const insightRows = optionalRows(insightsResult)
+  const messageRows = optionalRows(messagesResult)
+  const categoryRows = categoriesResult.data.map(toCategory)
+  recurringRows = await ensureSubscriptionRules(user.id, categoryRows, recurringRows)
+  const completedRows = await ensurePresentationData(user.id, categoryRows, {
+    goalRows,
+    contributionRows,
+    recurringRows,
+    insightRows,
+    messageRows,
+  })
+
+  return {
+    profile: profileResult.data,
+    cats: categoryRows,
+    txs: transactionsResult.data.map(toTransaction),
+    goals: completedRows.goalRows.map(toGoal),
+    contributions: completedRows.contributionRows.map(toContribution),
+    recurringRules: completedRows.recurringRows.map(toRecurringRule),
+    aiInsights: completedRows.insightRows.map(toAiInsight),
+    aiMessages: completedRows.messageRows.map(toAiMessage),
+  }
+}
+
+export async function saveTransaction(userId, transaction, editId) {
+  const payload = fromTransaction(transaction, userId)
+  if (editId) {
+    let { data, error } = await supabase
+      .from("transactions")
+      .update(payload)
+      .eq("id", editId)
+      .eq("user_id", userId)
+      .select()
+      .single()
+
+    if (error && isSchemaMissing(error)) {
+      const legacy = await supabase
+        .from("transactions")
+        .update(fromLegacyTransaction(transaction, userId))
+        .eq("id", editId)
+        .eq("user_id", userId)
+        .select()
+        .single()
+      data = legacy.data
+      error = legacy.error
+    }
+
+    if (error) throw error
+    return toTransaction(data)
+  }
+
+  let { data, error } = await supabase
+    .from("transactions")
+    .insert(payload)
+    .select()
+    .single()
+
+  if (error && isSchemaMissing(error)) {
+    const legacy = await supabase
+      .from("transactions")
+      .insert(fromLegacyTransaction(transaction, userId))
+      .select()
+      .single()
+    data = legacy.data
+    error = legacy.error
+  }
+
+  if (error) throw error
+  return toTransaction(data)
+}
+
+export async function saveTransactions(userId, transactions) {
+  if (transactions.length === 0) return []
+
+  const payload = transactions.map((transaction) => fromTransaction(transaction, userId))
+  let { data, error } = await supabase
+    .from("transactions")
+    .insert(payload)
+    .select()
+
+  if (error && isSchemaMissing(error)) {
+    const legacy = await supabase
+      .from("transactions")
+      .insert(transactions.map((transaction) => fromLegacyTransaction(transaction, userId)))
+      .select()
+    data = legacy.data
+    error = legacy.error
+  }
+
+  if (error) throw error
+  return (data || []).map(toTransaction)
+}
+
+export async function deleteTransaction(userId, id) {
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId)
+
+  if (error) throw error
+}
+
+export async function deleteTransactions(userId, ids) {
+  if (ids.length === 0) return
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("user_id", userId)
+    .in("id", ids)
+
+  if (error) throw error
+}
+
+export async function updateTransactions(userId, ids, patch) {
+  if (ids.length === 0) return []
+
+  const payload = {}
+  if (patch.type) payload.type = patch.type
+  if (patch.cat) payload.category_id = patch.cat
+  if (patch.paymentMethod) payload.payment_method = patch.paymentMethod
+  if (patch.tags) payload.tags = patch.tags
+
+  if (Object.keys(payload).length === 0) return []
+
+  let { data, error } = await supabase
+    .from("transactions")
+    .update(payload)
+    .eq("user_id", userId)
+    .in("id", ids)
+    .select()
+
+  if (error && isSchemaMissing(error)) {
+    const legacyPayload = {}
+    if (patch.type) legacyPayload.type = patch.type
+    if (patch.cat) legacyPayload.category_id = patch.cat
+    const legacy = await supabase
+      .from("transactions")
+      .update(legacyPayload)
+      .eq("user_id", userId)
+      .in("id", ids)
+      .select()
+    data = legacy.data
+    error = legacy.error
+  }
+
+  if (error) throw error
+  return (data || []).map(toTransaction)
+}
+
+export async function saveCategory(userId, category, editId) {
+  const payload = fromCategory(category, userId)
+  const legacyPayload = {
+    user_id: userId,
+    name: category.name,
+    color: category.color,
+    is_income: category.isIncome,
+    monthly_budget: category.budget || 0,
+  }
+
+  if (editId) {
+    let { data, error } = await supabase
+      .from("categories")
+      .update(payload)
+      .eq("id", editId)
+      .eq("user_id", userId)
+      .select()
+      .single()
+
+    if (error && isSchemaMissing(error)) {
+      const legacy = await supabase
+        .from("categories")
+        .update(legacyPayload)
+        .eq("id", editId)
+        .eq("user_id", userId)
+        .select()
+        .single()
+      data = legacy.data
+      error = legacy.error
+    }
+
+    if (error) throw error
+    return toCategory(data)
+  }
+
+  let { data, error } = await supabase
+    .from("categories")
+    .insert(payload)
+    .select()
+    .single()
+
+  if (error && isSchemaMissing(error)) {
+    const legacy = await supabase
+      .from("categories")
+      .insert(legacyPayload)
+      .select()
+      .single()
+    data = legacy.data
+    error = legacy.error
+  }
+
+  if (error) throw error
+  return toCategory(data)
+}
+
+export async function deleteCategory(userId, id) {
+  let { error } = await supabase
+    .from("categories")
+    .update({ is_archived: true })
+    .eq("id", id)
+    .eq("user_id", userId)
+
+  if (error && isSchemaMissing(error)) {
+    const legacy = await supabase
+      .from("categories")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId)
+    error = legacy.error
+  }
+
+  if (error) throw error
+}
+
+export async function updateProfile(userId, values) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .update(values)
+    .eq("user_id", userId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function saveGoal(userId, goal, editId) {
+  const query = editId
+    ? supabase.from("goals").update(fromGoal(goal, userId)).eq("id", editId).eq("user_id", userId)
+    : supabase.from("goals").insert(fromGoal(goal, userId))
+
+  const { data, error } = await query.select().single()
+  if (error) throw error
+  return toGoal(data)
+}
+
+export async function deleteGoal(userId, id) {
+  const { error } = await supabase
+    .from("goals")
+    .update({ is_archived: true })
+    .eq("id", id)
+    .eq("user_id", userId)
+
+  if (error) throw error
+}
+
+export async function addGoalContribution(userId, contribution) {
+  const { data, error } = await supabase
+    .from("goal_contributions")
+    .insert({
+      user_id: userId,
+      goal_id: contribution.goalId,
+      amount: contribution.amount,
+      contribution_date: contribution.date,
+      note: contribution.note || null,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+
+  const { data: goal } = await supabase
+    .from("goals")
+    .select("current_amount")
+    .eq("id", contribution.goalId)
+    .eq("user_id", userId)
+    .single()
+
+  await supabase
+    .from("goals")
+    .update({ current_amount: Number(goal?.current_amount || 0) + contribution.amount })
+    .eq("id", contribution.goalId)
+    .eq("user_id", userId)
+
+  return toContribution(data)
+}
+
+export async function saveRecurringRule(userId, rule, editId) {
+  const query = editId
+    ? supabase.from("recurring_rules").update(fromRecurringRule(rule, userId)).eq("id", editId).eq("user_id", userId)
+    : supabase.from("recurring_rules").insert(fromRecurringRule(rule, userId))
+
+  const { data, error } = await query.select().single()
+  if (error) throw error
+  return toRecurringRule(data)
+}
+
+export async function createTransactionFromRule(userId, rule) {
+  const transaction = await saveTransaction(userId, {
+    type: rule.type,
+    amount: rule.amount,
+    date: new Date().toISOString().slice(0, 10),
+    cat: rule.cat,
+    desc: rule.desc || rule.name,
+    paymentMethod: rule.paymentMethod,
+    tags: ["tekrarlı"],
+    source: "recurring",
+    recurringRuleId: rule.id,
+  })
+
+  const nextDate = advanceRecurringDate(rule.nextDate || transaction.date, rule.frequency)
+
+  await supabase
+    .from("recurring_rules")
+    .update({ next_date: nextDate })
+    .eq("id", rule.id)
+    .eq("user_id", userId)
+
+  return transaction
+}
+
+export async function sendCoachMessage(userId, message, summary) {
+  const { data, error } = await supabase.functions.invoke("ai-coach", {
+    body: { message, summary },
+  })
+
+  const response = error ? buildLocalCoachResponse(message, summary) : data
+
+  if (response?.reply) {
+    const { error: messageError } = await supabase.from("ai_messages").insert([
+      { user_id: userId, role: "user", content: message },
+      { user_id: userId, role: "assistant", content: response.reply },
+    ])
+    if (messageError && !isSchemaMissing(messageError)) throw messageError
+  }
+
+  if (Array.isArray(response?.insights) && response.insights.length > 0) {
+    const { error: insightError } = await supabase.from("ai_insights").insert(
+      response.insights.map((insight) => ({
+        user_id: userId,
+        type: insight.type || "coaching",
+        title: insight.title,
+        body: insight.body,
+        severity: insight.severity || "info",
+      }))
+    )
+    if (insightError && !isSchemaMissing(insightError)) throw insightError
+  }
+
+  return response
+}
+
+function buildLocalCoachResponse(message, summary) {
+  const totals = summary?.totals || { income: 0, expense: 0, net: 0 }
+  const previous = summary?.previousMonthTotals || { expense: 0 }
+  const topCategory = summary?.topExpenseCategories?.[0]
+  const budgetRisk = summary?.budgetStatus?.find((item) => item.remaining < 0)
+    || summary?.budgetStatus?.find((item) => item.budget > 0 && item.spent / item.budget >= 0.8)
+
+  const lines = [
+    "AI Edge Function henüz deploy edilmediği için yerel analiz modundayım.",
+    `Bu ay net akışınız ${Math.round(totals.net).toLocaleString("tr-TR")} TL.`,
+    `Toplam gideriniz ${Math.round(totals.expense).toLocaleString("tr-TR")} TL; geçen aya göre fark ${Math.round(totals.expense - previous.expense).toLocaleString("tr-TR")} TL.`,
+  ]
+
+  if (topCategory) {
+    lines.push(`En yüksek gider kategoriniz ${topCategory.name}: ${Math.round(topCategory.value).toLocaleString("tr-TR")} TL.`)
+  }
+  if (budgetRisk) {
+    lines.push(`${budgetRisk.name} bütçesinde dikkat gerekiyor; kalan tutar ${Math.round(budgetRisk.remaining).toLocaleString("tr-TR")} TL.`)
+  }
+
+  return {
+    reply: lines.join("\n"),
+    insights: [
+      {
+        type: "setup",
+        title: "AI Koç yerel modda",
+        body: "OpenAI destekli yanıt için Supabase Edge Function deploy edin ve OPENAI_API_KEY secret ekleyin.",
+        severity: "warning",
+      },
+      {
+        type: "question",
+        title: "Sorunuz kaydedildi",
+        body: message,
+        severity: "info",
+      },
+    ],
+  }
+}
