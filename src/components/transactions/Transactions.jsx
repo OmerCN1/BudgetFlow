@@ -1,14 +1,16 @@
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Card from "../ui/Card"
 import EmptyState from "../ui/EmptyState"
 import FieldLabel from "../ui/FieldLabel"
 import Modal from "../ui/Modal"
 import { S, FONT_BODY, FONT_MONO, inputStyle, btnGhost, btnDanger, btnPrimary, PALETTE } from "../../constants/theme"
 import { TRY, sum } from "../../utils/helpers"
+import { suggestCategory } from "../../utils/categorySuggestions"
 
 export default function Transactions({
   txs,
   cats,
+  receipts = [],
   catById,
   showModal,
   editTx,
@@ -25,6 +27,7 @@ export default function Transactions({
   onClose,
   exportCSV,
   importCSV,
+  onOpenReceipt,
 }) {
   const fileInputRef = useRef(null)
   const [selectedIds, setSelectedIds] = useState([])
@@ -62,9 +65,33 @@ export default function Transactions({
   const clearFilters = () => setFilters({ type: "", cat: "", from: "", to: "", q: "", paymentMethod: "" })
   const selectedSet = new Set(selectedIds)
   const allVisibleSelected = filteredTxs.length > 0 && filteredTxs.every((tx) => selectedSet.has(tx.id))
+  const receiptsByTx = useMemo(() => {
+    const map = new Map()
+    receipts.forEach((receipt) => {
+      if (!receipt.transactionId) return
+      const list = map.get(receipt.transactionId) || []
+      list.push(receipt)
+      map.set(receipt.transactionId, list)
+    })
+    return map
+  }, [receipts])
   const bulkCats = bulkPatch.type
     ? cats.filter((cat) => bulkPatch.type === "income" ? cat.isIncome : !cat.isIncome)
     : cats
+  const categorySuggestion = useMemo(
+    () => suggestCategory({ description: txForm.desc, cats, type: txForm.type }),
+    [txForm.desc, txForm.type, cats]
+  )
+
+  useEffect(() => {
+    if (!showModal || editTx || txForm.cat || !categorySuggestion?.cat?.id) return
+    setTxForm((prev) => ({
+      ...prev,
+      cat: categorySuggestion.cat.id,
+      paymentMethod: categorySuggestion.paymentMethod || prev.paymentMethod,
+      tags: mergeTags(prev.tags, categorySuggestion.tags),
+    }))
+  }, [showModal, editTx, txForm.cat, categorySuggestion, setTxForm])
 
   const toggleSort = (key) => {
     setSort((prev) => ({ key, dir: prev.key === key && prev.dir === "asc" ? "desc" : "asc" }))
@@ -317,6 +344,7 @@ export default function Transactions({
           <tbody>
             {filteredTxs.map((t, idx) => {
               const c = catById(t.cat)
+              const txReceipts = receiptsByTx.get(t.id) || []
               return (
                 <tr
                   key={t.id}
@@ -388,6 +416,15 @@ export default function Transactions({
                       <div style={{ color: S.muted, fontSize: 10 }}>
                         {(t.tags || []).slice(0, 2).join(", ")}
                       </div>
+                    )}
+                    {txReceipts.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenReceipt?.(txReceipts[0])}
+                        className="receipt-row-chip"
+                      >
+                        Fiş var
+                      </button>
                     )}
                   </td>
                   <td
@@ -525,6 +562,23 @@ export default function Transactions({
                 </option>
               ))}
             </select>
+            {categorySuggestion?.cat && categorySuggestion.cat.id !== txForm.cat && (
+              <button
+                type="button"
+                onClick={() =>
+                  setTxForm((p) => ({
+                    ...p,
+                    cat: categorySuggestion.cat.id,
+                    paymentMethod: categorySuggestion.paymentMethod || p.paymentMethod,
+                    tags: mergeTags(p.tags, categorySuggestion.tags),
+                  }))
+                }
+                className="smart-category-suggestion"
+              >
+                <span>Öneri: {categorySuggestion.cat.name}</span>
+                <b>%{categorySuggestion.confidence}</b>
+              </button>
+            )}
           </div>
 
           <div>
@@ -582,10 +636,26 @@ export default function Transactions({
               style={inputStyle}
             />
           </div>
+          {txForm.receiptId && (
+            <div className="receipt-attached-note">
+              <span>Fiş bu işleme kaydedilecek</span>
+              <button type="button" onClick={() => setTxForm((p) => ({ ...p, receiptId: "" }))}>
+                Kaldır
+              </button>
+            </div>
+          )}
         </Modal>
       )}
     </div>
   )
+}
+
+function mergeTags(current, next = []) {
+  const tags = String(current || "")
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+  return [...new Set([...tags, ...next])].join(", ")
 }
 
 function compareTransactions(a, b, sort, catById) {

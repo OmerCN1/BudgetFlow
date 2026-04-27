@@ -6,6 +6,9 @@ import Transactions from "./components/transactions/Transactions"
 import Categories from "./components/categories/Categories"
 import Goals from "./components/goals/Goals"
 import Reports from "./components/reports/Reports"
+import BudgetCalendar from "./components/calendar/BudgetCalendar"
+import Receipts from "./components/receipts/Receipts"
+import SubscriptionPlans from "./components/plans/SubscriptionPlans"
 import AICoach from "./components/coach/AICoach"
 import RecurringRules from "./components/recurring/RecurringRules"
 import Notifications, { buildNotifications } from "./components/notifications/Notifications"
@@ -20,11 +23,17 @@ import {
   addGoalContribution,
   createTransactionFromRule,
   deleteCategory,
+  deleteGoal,
+  deleteReceiptFile,
   deleteTransaction,
   deleteTransactions,
+  extractReceiptFromImage,
+  getReceiptUrl,
+  linkReceiptToTransaction,
   loadBudgetData,
   saveCategory,
   saveGoal,
+  saveReceiptFile,
   saveRecurringRule,
   saveTransaction,
   saveTransactions,
@@ -34,6 +43,7 @@ import {
 } from "./services/budgetService"
 import { PALETTE, FONT_BODY, S, btnPrimary } from "./constants/theme"
 import { today, sum } from "./utils/helpers"
+import { extractReceiptFieldsFromText, suggestCategory } from "./utils/categorySuggestions"
 
 export default function App() {
   const { user, loading: authLoading, isConfigured } = useAuth()
@@ -44,6 +54,7 @@ export default function App() {
   const [goals, setGoals] = useState([])
   const [contributions, setContributions] = useState([])
   const [recurringRules, setRecurringRules] = useState([])
+  const [receipts, setReceipts] = useState([])
   const [aiInsights, setAiInsights] = useState([])
   const [aiMessages, setAiMessages] = useState([])
   const [profile, setProfile] = useState(null)
@@ -68,6 +79,7 @@ export default function App() {
     desc: "",
     paymentMethod: "Kart",
     tags: "",
+    receiptId: "",
   })
 
   const [showCatModal, setShowCatModal] = useState(false)
@@ -116,6 +128,7 @@ export default function App() {
         setGoals(data.goals)
         setContributions(data.contributions)
         setRecurringRules(data.recurringRules)
+        setReceipts(data.receipts || [])
         setAiInsights(data.aiInsights)
         setAiMessages(data.aiMessages)
         setHasLoadedData(true)
@@ -149,6 +162,7 @@ export default function App() {
       setGoals([])
       setContributions([])
       setRecurringRules([])
+      setReceipts([])
       setAiInsights([])
       setAiMessages([])
       setProfile(null)
@@ -189,15 +203,15 @@ export default function App() {
   }
 
   const openAddTx = () => {
-    const firstExpCat = activeCats.find((c) => !c.isIncome)
     setTxForm({
       type: "expense",
       amount: "",
       date: today(),
-      cat: firstExpCat?.id || "",
+      cat: "",
       desc: "",
       paymentMethod: "Kart",
       tags: "",
+      receiptId: "",
     })
     setEditTx(null)
     setShowTxModal(true)
@@ -212,6 +226,7 @@ export default function App() {
       desc: t.desc || "",
       paymentMethod: t.paymentMethod || "Kart",
       tags: (t.tags || []).join(", "),
+      receiptId: receipts.find((receipt) => receipt.transactionId === t.id)?.id || "",
     })
     setEditTx(t)
     setShowTxModal(true)
@@ -238,6 +253,12 @@ export default function App() {
     setActionLoading(true)
     try {
       const saved = await saveTransaction(user.id, data, editTx?.id)
+      if (txForm.receiptId) {
+        const linkedReceipt = await linkReceiptToTransaction(user.id, txForm.receiptId, saved.id)
+        if (linkedReceipt) {
+          setReceipts((prev) => prev.map((receipt) => receipt.id === linkedReceipt.id ? linkedReceipt : receipt))
+        }
+      }
       setTxs((prev) => editTx ? prev.map((t) => t.id === editTx.id ? saved : t) : [saved, ...prev])
       setShowTxModal(false)
       showNotice(editTx ? "İşlem güncellendi." : "İşlem eklendi.")
@@ -248,11 +269,130 @@ export default function App() {
     }
   }
 
+  const handleReceiptUpload = async (file) => {
+    if (!file) return
+    setActionLoading(true)
+    try {
+      const imageDataUrl = file.type?.startsWith("image/") ? await readFileAsDataUrl(file) : ""
+      const extracted = imageDataUrl ? await extractReceiptFromImage(imageDataUrl, file.name) : {}
+      const fallback = extractReceiptFieldsFromText(file.name)
+      const amount = Number(extracted?.amount || fallback.amount || 0)
+      const desc = extracted?.merchant || fallback.merchant || file.name.replace(/\.[^.]+$/, "")
+      const date = extracted?.date || fallback.date || today()
+      const suggested = suggestCategory({ description: desc, cats: activeCats, type: "expense" })
+      const tags = ["fiş", ...(suggested?.tags || [])]
+      const receipt = await saveReceiptFile(user.id, file, {
+        merchant: desc,
+        amount,
+        date,
+        paymentMethod: extracted?.paymentMethod || suggested?.paymentMethod || "Kart",
+        notes: extracted?.notes || "",
+        confidence: extracted?.confidence || 0,
+      })
+      setReceipts((prev) => [receipt, ...prev])
+
+      setTxForm({
+        type: "expense",
+        amount: amount ? String(amount) : "",
+        date,
+        cat: suggested?.cat?.id || "",
+        desc,
+        paymentMethod: extracted?.paymentMethod || suggested?.paymentMethod || "Kart",
+        tags: [...new Set(tags)].join(", "),
+        receiptId: receipt.id,
+      })
+      setEditTx(null)
+      setShowTxModal(true)
+      showNotice(
+        amount
+          ? `Fiş arşive kaydedildi: ${desc} · ${formatCurrency(amount)}. Kontrol edip kaydedebilirsiniz.`
+          : "Fiş arşive kaydedildi. Okunamayan alanları kontrol edip tamamlayabilirsiniz."
+      )
+    } catch (err) {
+      const fallback = extractReceiptFieldsFromText(file.name)
+      const suggested = suggestCategory({ description: fallback.merchant || file.name, cats: activeCats, type: "expense" })
+      try {
+        const receipt = await saveReceiptFile(user.id, file, {
+          merchant: fallback.merchant || file.name.replace(/\.[^.]+$/, ""),
+          amount: fallback.amount,
+          date: fallback.date || "",
+          paymentMethod: suggested?.paymentMethod || "Kart",
+          notes: err.message || "Otomatik okuma tamamlanamadı.",
+          confidence: 0,
+        })
+        setReceipts((prev) => [receipt, ...prev])
+        setTxForm({
+          type: "expense",
+          amount: fallback.amount ? String(fallback.amount) : "",
+          date: fallback.date || today(),
+          cat: suggested?.cat?.id || "",
+          desc: fallback.merchant || file.name.replace(/\.[^.]+$/, ""),
+          paymentMethod: suggested?.paymentMethod || "Kart",
+          tags: ["fiş", ...(suggested?.tags || [])].join(", "),
+          receiptId: receipt.id,
+        })
+        setEditTx(null)
+        setShowTxModal(true)
+        showNotice("Fiş arşive kaydedildi; dosya adından tahmin edilen formu açtım.")
+      } catch (storageErr) {
+        showError(storageErr.message || "Fiş arşive kaydedilemedi.")
+      }
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleUseReceipt = (receipt) => {
+    const suggested = suggestCategory({ description: receipt.merchant || receipt.fileName, cats: activeCats, type: "expense" })
+    setTxForm({
+      type: "expense",
+      amount: receipt.amount ? String(receipt.amount) : "",
+      date: receipt.date || today(),
+      cat: suggested?.cat?.id || "",
+      desc: receipt.merchant || receipt.fileName.replace(/\.[^.]+$/, ""),
+      paymentMethod: receipt.paymentMethod || suggested?.paymentMethod || "Kart",
+      tags: ["fiş", ...(suggested?.tags || [])].join(", "),
+      receiptId: receipt.id,
+    })
+    setEditTx(null)
+    setShowTxModal(true)
+  }
+
+  const handleOpenReceipt = async (receipt) => {
+    setActionLoading(true)
+    try {
+      const url = await getReceiptUrl(user.id, receipt)
+      window.open(url, "_blank", "noopener,noreferrer")
+    } catch (err) {
+      showError(err.message || "Fiş açılamadı.")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleGetReceiptUrl = (receipt) => getReceiptUrl(user.id, receipt)
+
+  const handleDeleteReceipt = async (receipt) => {
+    const ok = window.confirm(`${receipt.fileName} arşivden silinsin mi?`)
+    if (!ok) return
+    setActionLoading(true)
+    try {
+      await deleteReceiptFile(user.id, receipt)
+      setReceipts((prev) => prev.filter((item) => item.id !== receipt.id))
+      showNotice("Fiş arşivden silindi.")
+    } catch (err) {
+      showError(err.message || "Fiş silinemedi.")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   const deleteTx = async (id) => {
     setActionLoading(true)
     try {
       await deleteTransaction(user.id, id)
       setTxs((prev) => prev.filter((t) => t.id !== id))
+      setReceipts((prev) => prev.map((receipt) => receipt.transactionId === id ? { ...receipt, transactionId: "" } : receipt))
       showNotice("İşlem silindi.")
     } catch (err) {
       showError(err.message || "İşlem silinemedi.")
@@ -267,6 +407,7 @@ export default function App() {
     try {
       await deleteTransactions(user.id, ids)
       setTxs((prev) => prev.filter((t) => !ids.includes(t.id)))
+      setReceipts((prev) => prev.map((receipt) => ids.includes(receipt.transactionId) ? { ...receipt, transactionId: "" } : receipt))
       showNotice(`${ids.length} işlem silindi.`)
     } catch (err) {
       showError(err.message || "İşlemler silinemedi.")
@@ -374,6 +515,19 @@ export default function App() {
       showNotice("Hedef katkısı eklendi.")
     } catch (err) {
       showError(err.message || "Katkı eklenemedi.")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleDeleteGoal = async (id) => {
+    setActionLoading(true)
+    try {
+      await deleteGoal(user.id, id)
+      setGoals((prev) => prev.map((goal) => goal.id === id ? { ...goal, isArchived: true } : goal))
+      showNotice("Hedef kaldırıldı.")
+    } catch (err) {
+      showError(err.message || "Hedef kaldırılamadı.")
     } finally {
       setActionLoading(false)
     }
@@ -602,6 +756,32 @@ export default function App() {
                 <Notifications txs={txs} cats={cats} goals={goals} recurringRules={recurringRules} setView={setView} />
               )}
               {view === "reports" && <Reports txs={txs} cats={cats} />}
+              {view === "receipts" && (
+                <Receipts
+                  receipts={receipts}
+                  txs={txs}
+                  onUpload={handleReceiptUpload}
+                  onOpen={handleOpenReceipt}
+                  onUse={handleUseReceipt}
+                  onDelete={handleDeleteReceipt}
+                  onGetUrl={handleGetReceiptUrl}
+                />
+              )}
+              {view === "plans" && (
+                <SubscriptionPlans
+                  currentPlan="premium"
+                  onBackAccount={() => setView("account")}
+                />
+              )}
+              {view === "calendar" && (
+                <BudgetCalendar
+                  txs={txs}
+                  cats={cats}
+                  goals={goals}
+                  recurringRules={recurringRules}
+                  setView={setView}
+                />
+              )}
               {view === "subscriptions" && (
                 <Subscriptions cats={activeCats} rules={recurringRules} onSaveRule={handleSaveRule} onCreateFromRule={handleCreateFromRule} />
               )}
@@ -610,6 +790,7 @@ export default function App() {
                   <Transactions
                     txs={txs}
                     cats={activeCats}
+                    receipts={receipts}
                     catById={catById}
                     showModal={showTxModal}
                     editTx={editTx}
@@ -624,9 +805,10 @@ export default function App() {
                     onBulkDelete={deleteManyTx}
                     onBulkUpdate={updateManyTx}
                     onClose={() => setShowTxModal(false)}
-                  exportCSV={exportCSV}
-                  importCSV={importCSV}
-                />
+                    exportCSV={exportCSV}
+                    importCSV={importCSV}
+                    onOpenReceipt={handleOpenReceipt}
+                  />
                   <RecurringRules cats={activeCats} rules={recurringRules} onSaveRule={handleSaveRule} onCreateFromRule={handleCreateFromRule} />
                 </>
               )}
@@ -652,6 +834,7 @@ export default function App() {
                   goals={goals}
                   contributions={contributions}
                   onSaveGoal={handleSaveGoal}
+                  onDeleteGoal={handleDeleteGoal}
                   onAddContribution={handleAddContribution}
                   setView={setView}
                 />
@@ -675,6 +858,7 @@ export default function App() {
                   cats={cats}
                   balance={balance}
                   onProfileUpdate={handleProfileUpdate}
+                  onOpenPlans={() => setView("plans")}
                 />
               )}
             </>
@@ -770,4 +954,21 @@ function parseCSV(text) {
   }
 
   return rows
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    minimumFractionDigits: 0,
+  }).format(value)
 }

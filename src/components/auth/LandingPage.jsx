@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { S, FONT_BODY, FONT_MONO, btnPrimary, btnGhost } from "../../constants/theme"
 
 const features = [
@@ -33,7 +34,39 @@ const transactions = [
   { name: "Enerji Faturası", meta: "15 Haz 2026", amount: "-₺1,240.00", tone: S.text, icon: "ϟ" },
 ]
 
+const plans = [
+  {
+    name: "Ücretsiz",
+    monthly: 0,
+    note: "Başlangıç",
+    features: ["Gelir/Gider takibi", "3 kategori limiti", "Manuel veri girişi"],
+    action: "Başla",
+    tone: "muted",
+  },
+  {
+    name: "Standart",
+    monthly: 49,
+    note: "Popüler",
+    features: ["Sınırsız kategori", "Banka entegrasyonu", "Detaylı raporlar"],
+    action: "Standart'ı Seç",
+    tone: "standard",
+  },
+  {
+    name: "Premium",
+    monthly: 149,
+    note: "En İyi Değer",
+    features: ["AI Finansal Koç", "Otomatik bütçe risk analizi", "Sınırsız hedef", "Öncelikli destek"],
+    action: "Premium'a Geç",
+    tone: "premium",
+  },
+]
+
 export default function LandingPage({ onLogin, onSignup }) {
+  const [billing, setBilling] = useState("yearly")
+  const yearly = billing === "yearly"
+
+  const planPrice = (monthly) => `₺${yearly ? Math.round(monthly * 0.8) : monthly}`
+
   return (
     <div className="public-page" style={{ fontFamily: FONT_BODY }}>
       <nav className="public-nav">
@@ -44,6 +77,7 @@ export default function LandingPage({ onLogin, onSignup }) {
         <div className="public-nav-links" aria-label="Tanıtım menüsü">
           <a href="#features">Özellikler</a>
           <a href="#insights">Çözümler</a>
+          <a href="#plans">Planlar</a>
           <a href="#security">Güvenlik</a>
           <a href="#contact">Kaynaklar</a>
         </div>
@@ -149,6 +183,60 @@ export default function LandingPage({ onLogin, onSignup }) {
               <span>{label}</span>
             </div>
           ))}
+        </section>
+
+        <section className="landing-section landing-pricing" id="plans">
+          <div className="landing-pricing-head">
+            <span>BudgetFlow Plans</span>
+            <h2>Planınızı Seçin</h2>
+            <p>Size en uygun bütçe yönetimi deneyimini seçin. İstersen ücretsiz başlayın, ihtiyaç büyüdükçe daha güçlü araçlara geçin.</p>
+            <div className="landing-billing-pill" role="group" aria-label="Faturalandırma dönemi">
+              <button
+                type="button"
+                className={billing === "monthly" ? "is-active" : ""}
+                onClick={() => setBilling("monthly")}
+              >
+                Aylık
+              </button>
+              <button
+                type="button"
+                className={billing === "yearly" ? "is-active" : ""}
+                onClick={() => setBilling("yearly")}
+              >
+                Yıllık <small>-%20</small>
+              </button>
+            </div>
+          </div>
+
+          <div className="landing-plan-grid">
+            {plans.map((plan) => (
+              <article className={`glass-card landing-plan-card is-${plan.tone}`} key={plan.name}>
+                {plan.tone !== "muted" && <div className="landing-plan-badge">{plan.note}</div>}
+                <div className="landing-plan-top">
+                  <h3>{plan.name}</h3>
+                  <div>
+                    <strong className="finance-number">{planPrice(plan.monthly)}</strong>
+                    <span>/ay</span>
+                  </div>
+                  {yearly && plan.monthly > 0 && (
+                    <small>Yıllık ödemede ₺{Math.round(plan.monthly * 12 * 0.2)} tasarruf</small>
+                  )}
+                </div>
+                <ul>
+                  {plan.features.map((feature) => (
+                    <li key={feature}><span>✓</span>{feature}</li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  onClick={onSignup}
+                  className={plan.tone === "premium" ? "landing-plan-primary" : "landing-plan-secondary"}
+                >
+                  {plan.action}
+                </button>
+              </article>
+            ))}
+          </div>
         </section>
 
         <section className="landing-insight" id="insights">

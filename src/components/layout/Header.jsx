@@ -1,22 +1,71 @@
+import { useState } from "react"
 import { S, FONT_BODY, btnPrimary } from "../../constants/theme"
 import { TRY } from "../../utils/helpers"
 
 export default function Header({ view, setView, balance, notificationCount = 0, onAddTx, user, disabled }) {
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const displayName = user?.user_metadata?.display_name || user?.user_metadata?.full_name || "Hesabım"
+  const initials = displayName
+    .split(/[.\s_-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase()
+
   const NAV = [
-    { id: "dashboard", label: "Özet", icon: "▦" },
-    { id: "notifications", label: "Bildirimler", icon: "!" },
-    { id: "transactions", label: "İşlemler", icon: "⇄" },
-    { id: "subscriptions", label: "Abonelikler", icon: "↻" },
-    { id: "reports", label: "Raporlar", icon: "▥" },
-    { id: "goals", label: "Hedefler", icon: "◎" },
-    { id: "coach", label: "AI Koç", icon: "✦" },
-    { id: "categories", label: "Kategoriler", icon: "▤" },
-    { id: "account", label: "Hesap", icon: "◉" },
+    { id: "dashboard", label: "Özet", icon: "dashboard" },
+    { id: "transactions", label: "İşlemler", icon: "transactions" },
+    { id: "receipts", label: "Belgeler", icon: "receipts" },
+    { id: "calendar", label: "Takvim", icon: "calendar" },
+    { id: "subscriptions", label: "Abonelikler", icon: "subscriptions" },
+    { id: "reports", label: "Raporlar", icon: "reports" },
+    { id: "goals", label: "Hedefler", icon: "goals" },
+    { id: "coach", label: "AI Koç", icon: "coach" },
+    { id: "categories", label: "Kategoriler", icon: "categories" },
   ]
 
+  const navigate = (nextView) => {
+    setView(nextView)
+    setMobileOpen(false)
+  }
+
+  const addTransaction = () => {
+    onAddTx()
+    setMobileOpen(false)
+  }
+
   return (
-    <header className="luminous-sidebar">
+    <>
+    <button
+      className="mobile-sidebar-trigger"
+      type="button"
+      onClick={() => setMobileOpen(true)}
+      aria-label="Menüyü aç"
+      aria-expanded={mobileOpen}
+    >
+      <span className="mobile-sidebar-mark">BF</span>
+      <span>
+        <strong>BudgetFlow</strong>
+        <small>PREMIUM FİNANS</small>
+      </span>
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M4 7h16M4 12h16M4 17h16" />
+      </svg>
+    </button>
+
+    {mobileOpen && (
+      <button
+        className="mobile-sidebar-scrim"
+        type="button"
+        onClick={() => setMobileOpen(false)}
+        aria-label="Menüyü kapat"
+      />
+    )}
+
+    <header className={`luminous-sidebar${mobileOpen ? " is-mobile-open" : ""}`}>
       <div
+        className="sidebar-brand-row"
         style={{
           display: "flex",
           alignItems: "center",
@@ -49,13 +98,20 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
             PREMIUM FİNANS
           </div>
         </div>
+        <button
+          className="mobile-sidebar-close"
+          type="button"
+          onClick={() => setMobileOpen(false)}
+          aria-label="Menüyü kapat"
+        >
+          ×
+        </button>
       </div>
 
       <div
-        className="glass-card"
+        className="glass-card sidebar-balance-card"
         style={{
           marginTop: 28,
-          padding: "0.8rem 1rem",
           display: "flex",
           alignItems: "center",
           gap: 10,
@@ -71,11 +127,10 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
             flexShrink: 0,
           }}
         />
-        <div style={{ minWidth: 0 }}>
+        <div className="sidebar-balance-copy" style={{ minWidth: 0 }}>
           <div
-            className="finance-number"
+            className="finance-number sidebar-balance-value"
             style={{
-              fontSize: 16,
               fontWeight: 800,
               color: balance >= 0 ? S.green : S.red,
               whiteSpace: "nowrap",
@@ -92,72 +147,58 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
         {NAV.map((t) => (
           <button
             key={t.id}
-            onClick={() => setView(t.id)}
+            onClick={() => navigate(t.id)}
             className={`luminous-nav-button${view === t.id ? " is-active" : ""}`}
           >
             <span
               aria-hidden="true"
+              className="luminous-nav-icon"
               style={{
-                width: 24,
-                height: 24,
-                borderRadius: 6,
-                display: "grid",
-                placeItems: "center",
-                background: view === t.id ? "rgba(78,222,163,0.16)" : "rgba(255,255,255,0.04)",
                 color: view === t.id ? S.green : S.muted,
-                flexShrink: 0,
               }}
             >
-              {t.icon}
+              <NavIcon name={t.icon} />
             </span>
             {t.label}
-            {t.id === "notifications" && notificationCount > 0 && (
-              <span
-                style={{
-                  marginLeft: "auto",
-                  minWidth: 22,
-                  height: 22,
-                  borderRadius: 999,
-                  display: "grid",
-                  placeItems: "center",
-                  color: "#2b1900",
-                  background: S.amber,
-                  fontSize: 11,
-                  fontWeight: 900,
-                }}
-              >
-                {notificationCount}
-              </span>
-            )}
           </button>
         ))}
       </nav>
 
-      <div
-        style={{
-          marginTop: "auto",
-          display: "grid",
-          gap: 12,
-        }}
-      >
-        {user?.email && (
-          <div
-            style={{
-              color: S.sub,
-              fontSize: 13,
-              borderTop: `1px solid ${S.border}`,
-              paddingTop: 14,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-            title={user.email}
+      <div className="sidebar-footer">
+        <div className="sidebar-footer-row">
+          {user?.email && (
+            <button className="sidebar-profile" onClick={() => navigate("account")} title={user.email} type="button">
+              <span className="sidebar-profile-avatar">{initials || "BF"}</span>
+              <span className="sidebar-profile-copy">
+                <span>{displayName}</span>
+                <small>Profil</small>
+              </span>
+            </button>
+          )}
+          <button
+            className={`sidebar-notification-button${view === "notifications" ? " is-active" : ""}`}
+            onClick={() => navigate("notifications")}
+            type="button"
+            aria-label={`Bildirimler${notificationCount > 0 ? `, ${notificationCount} yeni` : ""}`}
+            title="Bildirimler"
           >
-            {user.email}
-          </div>
-        )}
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M10.27 21a2 2 0 0 0 3.46 0" />
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+            </svg>
+            {notificationCount > 0 && <span>{notificationCount}</span>}
+          </button>
+        </div>
         <button
-          onClick={onAddTx}
+          onClick={addTransaction}
           disabled={disabled}
           style={{
             ...btnPrimary,
@@ -170,5 +211,86 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
         </button>
       </div>
     </header>
+    </>
+  )
+}
+
+function NavIcon({ name }) {
+  const common = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.9,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  }
+
+  const paths = {
+    dashboard: (
+      <>
+        <rect x="3.5" y="3.5" width="7" height="7" rx="1.6" />
+        <rect x="13.5" y="3.5" width="7" height="7" rx="1.6" />
+        <rect x="3.5" y="13.5" width="7" height="7" rx="1.6" />
+        <path d="M14 15h6M14 19h4" />
+      </>
+    ),
+    transactions: (
+      <>
+        <path d="M7 7h12M15 3l4 4-4 4" />
+        <path d="M17 17H5M9 13l-4 4 4 4" />
+      </>
+    ),
+    receipts: (
+      <>
+        <path d="M7 3.5h10l2 2v15l-2-1.2-2 1.2-2-1.2-2 1.2-2-1.2-2 1.2V3.5Z" />
+        <path d="M9 8h6M9 12h7M9 16h4" />
+      </>
+    ),
+    calendar: (
+      <>
+        <rect x="4" y="5.5" width="16" height="14.5" rx="2.4" />
+        <path d="M8 3.5v4M16 3.5v4M4 10h16" />
+        <rect x="8" y="13" width="3" height="3" rx="0.7" />
+      </>
+    ),
+    subscriptions: (
+      <>
+        <path d="M17.8 7.4A7 7 0 0 0 5 11.3" />
+        <path d="M15.4 7.6h2.8V4.8" />
+        <path d="M6.2 16.6A7 7 0 0 0 19 12.7" />
+        <path d="M8.6 16.4H5.8v2.8" />
+        <path d="M12 9v4l2.5 1.5" />
+      </>
+    ),
+    reports: (
+      <>
+        <path d="M5 19.5V4.5h14v15H5Z" />
+        <path d="M8.5 16v-4M12 16V8M15.5 16v-6" />
+      </>
+    ),
+    goals: (
+      <>
+        <circle cx="12" cy="12" r="8.5" />
+        <circle cx="12" cy="12" r="4.8" />
+        <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      </>
+    ),
+    coach: (
+      <>
+        <path d="M12 3.5l1.8 4.7 4.7 1.8-4.7 1.8-1.8 4.7-1.8-4.7L5.5 10l4.7-1.8L12 3.5Z" />
+        <path d="M18 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z" />
+      </>
+    ),
+    categories: (
+      <>
+        <path d="M5 6.5h14M5 12h14M5 17.5h14" />
+        <path d="M8 4.5v4M15.5 10v4M10.5 15.5v4" />
+      </>
+    ),
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...common}>
+      {paths[name] || paths.dashboard}
+    </svg>
   )
 }

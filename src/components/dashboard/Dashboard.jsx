@@ -69,16 +69,21 @@ export default function Dashboard({ txs, cats, catById, setView }) {
   }, [thisMonthTotals.net, budgetRisks])
 
   const pieData = useMemo(() => {
-    const map = {}
+    const map = new Map()
     dashboardTxs.filter((t) => t.type === "expense").forEach((t) => {
-      map[t.cat] = (map[t.cat] || 0) + t.amount
+      const c = catById(t.cat)
+      const name = c?.name || "Kategori yok"
+      const key = name.trim().toLocaleLowerCase("tr-TR")
+      const current = map.get(key) || { name, value: 0, color: c?.color || "#888" }
+      map.set(key, { ...current, value: current.value + t.amount })
     })
-    return Object.entries(map)
-      .map(([id, val]) => {
-        const c = catById(id)
-        return { name: c?.name || id, value: val, color: c?.color || "#888" }
-      })
+    const ordered = [...map.values()]
       .sort((a, b) => b.value - a.value)
+    const visible = ordered.slice(0, 5)
+    const otherValue = ordered.slice(5).reduce((total, item) => total + item.value, 0)
+    return otherValue > 0
+      ? [...visible, { name: "Diğer", value: otherValue, color: S.muted }]
+      : visible
   }, [dashboardTxs, cats])
 
   const lineData = useMemo(() =>
@@ -89,11 +94,11 @@ export default function Dashboard({ txs, cats, catById, setView }) {
       const label = d.toLocaleDateString("tr-TR", { month: "short" })
       return {
         ay:    label,
-        Gelir: sum(dashboardTxs.filter((t) => t.type === "income"  && t.date.startsWith(key))),
-        Gider: sum(dashboardTxs.filter((t) => t.type === "expense" && t.date.startsWith(key))),
+        Gelir: sum(txs.filter((t) => t.type === "income"  && t.date.startsWith(key))),
+        Gider: sum(txs.filter((t) => t.type === "expense" && t.date.startsWith(key))),
       }
     })
-  , [dashboardTxs])
+  , [txs])
 
   const monthLabel = new Date().toLocaleDateString("tr-TR", {
     month: "long",

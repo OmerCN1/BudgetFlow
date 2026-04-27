@@ -1,7 +1,7 @@
-export default function Card({ children, style = {} }) {
+export default function Card({ children, style = {}, className = "" }) {
   return (
     <div
-      className="glass-card"
+      className={`glass-card${className ? ` ${className}` : ""}`}
       style={{
         padding: "1.5rem",
         ...style,

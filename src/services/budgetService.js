@@ -137,6 +137,22 @@ const toAiMessage = (row) => ({
   createdAt: row.created_at,
 })
 
+const toReceipt = (row) => ({
+  id: row.id,
+  transactionId: row.transaction_id || "",
+  filePath: row.file_path,
+  fileName: row.file_name,
+  fileType: row.file_type || "",
+  fileSize: Number(row.file_size || 0),
+  merchant: row.merchant || "",
+  amount: Number(row.amount || 0),
+  date: row.receipt_date || "",
+  paymentMethod: row.payment_method || "Kart",
+  notes: row.notes || "",
+  confidence: Number(row.scan_confidence || 0),
+  createdAt: row.created_at,
+})
+
 const isSchemaMissing = (error) => {
   const message = error?.message || ""
   return (
@@ -193,6 +209,9 @@ const advanceRecurringDate = (dateString, frequency) => {
   else date.setMonth(date.getMonth() + 1)
   return date.toISOString().slice(0, 10)
 }
+
+const categoryDedupeKey = (category) =>
+  `${String(category.name || "").trim().toLocaleLowerCase("tr-TR")}:${Boolean(category.is_income)}`
 
 async function ensureProfile(user) {
   const { data: profile, error } = await supabase
@@ -306,7 +325,11 @@ async function insertSeedTransactions(userId, categoryIdMap, seedMonthMap, exist
 async function ensureCoreDemoData(userId, categories, transactions) {
   const categoryIdMap = new Map()
   for (const category of INIT_CATS) {
-    const match = categories.find((item) => item.name === category.name)
+    const match = categories.find(
+      (item) =>
+        item.name.trim().toLocaleLowerCase("tr-TR") === category.name.toLocaleLowerCase("tr-TR") &&
+        Boolean(item.is_income) === Boolean(category.isIncome)
+    )
     if (match) {
       categoryIdMap.set(category.id, match.id)
       continue
@@ -319,6 +342,58 @@ async function ensureCoreDemoData(userId, categories, transactions) {
   if (transactions.length < INIT_TXS.length) {
     await insertSeedTransactions(userId, categoryIdMap, buildSeedMonthMap(), transactions)
   }
+}
+
+async function dedupeCategories(userId, categories, transactions, recurringRows) {
+  const groups = new Map()
+  categories.forEach((category) => {
+    const key = categoryDedupeKey(category)
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(category)
+  })
+
+  const duplicateGroups = [...groups.values()].filter((group) => group.length > 1)
+  if (duplicateGroups.length === 0) return false
+
+  const transactionRefs = new Map()
+  transactions.forEach((tx) => {
+    transactionRefs.set(tx.category_id, (transactionRefs.get(tx.category_id) || 0) + 1)
+  })
+  recurringRows.forEach((rule) => {
+    transactionRefs.set(rule.category_id, (transactionRefs.get(rule.category_id) || 0) + 1)
+  })
+
+  for (const group of duplicateGroups) {
+    const [keeper, ...duplicates] = [...group].sort((a, b) => {
+      const refDelta = (transactionRefs.get(b.id) || 0) - (transactionRefs.get(a.id) || 0)
+      if (refDelta !== 0) return refDelta
+      return String(a.created_at || "").localeCompare(String(b.created_at || ""))
+    })
+    const duplicateIds = duplicates.map((category) => category.id)
+
+    const { error: txError } = await supabase
+      .from("transactions")
+      .update({ category_id: keeper.id })
+      .eq("user_id", userId)
+      .in("category_id", duplicateIds)
+    if (txError) throw txError
+
+    const recurringUpdate = await supabase
+      .from("recurring_rules")
+      .update({ category_id: keeper.id })
+      .eq("user_id", userId)
+      .in("category_id", duplicateIds)
+    if (recurringUpdate.error && !isSchemaMissing(recurringUpdate.error)) throw recurringUpdate.error
+
+    const { error: deleteError } = await supabase
+      .from("categories")
+      .delete()
+      .eq("user_id", userId)
+      .in("id", duplicateIds)
+    if (deleteError) throw deleteError
+  }
+
+  return true
 }
 
 async function pruneLegacyDemoTransactions(userId, profile, transactions) {
@@ -590,6 +665,7 @@ export async function loadBudgetData(user) {
     recurringResult,
     insightsResult,
     messagesResult,
+    receiptsResult,
   ] = await Promise.all([
     supabase
       .from("categories")
@@ -634,11 +710,46 @@ export async function loadBudgetData(user) {
       .eq("user_id", user.id)
       .order("created_at", { ascending: true })
       .limit(50),
+    supabase
+      .from("receipts")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
   ])
 
   if (categoriesResult.error) throw categoriesResult.error
   if (transactionsResult.error) throw transactionsResult.error
   if (profileResult.error) throw profileResult.error
+
+  const dedupedCategories = await dedupeCategories(
+    user.id,
+    categoriesResult.data,
+    transactionsResult.data,
+    optionalRows(recurringResult)
+  )
+  if (dedupedCategories) {
+    const [nextCategoriesResult, nextTransactionsResult, nextRecurringResult] = await Promise.all([
+      supabase.from("categories").select("*").eq("user_id", user.id).order("created_at", { ascending: true }),
+      supabase
+        .from("transactions")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("transaction_date", { ascending: false })
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("recurring_rules")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("next_date", { ascending: true }),
+    ])
+
+    if (nextCategoriesResult.error) throw nextCategoriesResult.error
+    if (nextTransactionsResult.error) throw nextTransactionsResult.error
+    if (nextRecurringResult.error && !isSchemaMissing(nextRecurringResult.error)) throw nextRecurringResult.error
+    categoriesResult = nextCategoriesResult
+    transactionsResult = nextTransactionsResult
+    recurringResult = nextRecurringResult
+  }
 
   const prunedLegacyRows = await pruneLegacyDemoTransactions(user.id, profileResult.data, transactionsResult.data)
   if (prunedLegacyRows) {
@@ -703,6 +814,7 @@ export async function loadBudgetData(user) {
   let recurringRows = optionalRows(recurringResult)
   const insightRows = optionalRows(insightsResult)
   const messageRows = optionalRows(messagesResult)
+  const receiptRows = optionalRows(receiptsResult)
   const categoryRows = categoriesResult.data.map(toCategory)
   recurringRows = await ensureSubscriptionRules(user.id, categoryRows, recurringRows)
   const completedRows = await ensurePresentationData(user.id, categoryRows, {
@@ -722,6 +834,7 @@ export async function loadBudgetData(user) {
     recurringRules: completedRows.recurringRows.map(toRecurringRule),
     aiInsights: completedRows.insightRows.map(toAiInsight),
     aiMessages: completedRows.messageRows.map(toAiMessage),
+    receipts: receiptRows.map(toReceipt),
   }
 }
 
@@ -926,12 +1039,28 @@ export async function deleteCategory(userId, id) {
 }
 
 export async function updateProfile(userId, values) {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("profiles")
     .update(values)
     .eq("user_id", userId)
     .select()
     .single()
+
+  if (error && isSchemaMissing(error)) {
+    const fallbackValues = Object.fromEntries(
+      Object.entries(values).filter(([key]) =>
+        ["display_name", "monthly_income_target", "currency", "locale", "timezone"].includes(key)
+      )
+    )
+    const fallback = await supabase
+      .from("profiles")
+      .update(fallbackValues)
+      .eq("user_id", userId)
+      .select()
+      .single()
+    data = fallback.data
+    error = fallback.error
+  }
 
   if (error) throw error
   return data
@@ -1051,6 +1180,114 @@ export async function sendCoachMessage(userId, message, summary) {
   }
 
   return response
+}
+
+export async function extractReceiptFromImage(imageDataUrl, fileName) {
+  const { data, error } = await supabase.functions.invoke("receipt-scanner", {
+    body: { imageDataUrl, fileName },
+  })
+
+  if (error) throw error
+  return data
+}
+
+export async function saveReceiptFile(userId, file, metadata = {}) {
+  const extension = file.name.includes(".") ? file.name.split(".").pop() : "bin"
+  const safeName = sanitizeStorageName(file.name)
+  const filePath = `${userId}/${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}-${safeName}`
+
+  const upload = await supabase.storage
+    .from("receipts")
+    .upload(filePath, file, {
+      contentType: file.type || undefined,
+      upsert: false,
+    })
+
+  if (upload.error) {
+    throw new Error(
+      upload.error.message?.includes("Bucket not found")
+        ? "Fiş arşivi hazır değil. Supabase SQL Editor'da supabase/schema.sql dosyasını çalıştırın."
+        : upload.error.message
+    )
+  }
+
+  const { data, error } = await supabase
+    .from("receipts")
+    .insert({
+      user_id: userId,
+      file_path: filePath,
+      file_name: file.name || `${metadata.merchant || "fis"}.${extension}`,
+      file_type: file.type || null,
+      file_size: file.size || 0,
+      merchant: metadata.merchant || null,
+      amount: metadata.amount || 0,
+      receipt_date: metadata.date || null,
+      payment_method: metadata.paymentMethod || "Kart",
+      notes: metadata.notes || null,
+      scan_confidence: metadata.confidence || 0,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    await supabase.storage.from("receipts").remove([filePath])
+    if (isSchemaMissing(error)) {
+      throw new Error("Fiş arşivi tablosu hazır değil. Supabase SQL Editor'da supabase/schema.sql dosyasını çalıştırın.")
+    }
+    throw error
+  }
+
+  return toReceipt(data)
+}
+
+export async function linkReceiptToTransaction(userId, receiptId, transactionId) {
+  if (!receiptId || !transactionId) return null
+  const { data, error } = await supabase
+    .from("receipts")
+    .update({ transaction_id: transactionId })
+    .eq("id", receiptId)
+    .eq("user_id", userId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return toReceipt(data)
+}
+
+export async function getReceiptUrl(userId, receipt) {
+  if (!receipt?.filePath) return ""
+  if (!receipt.filePath.startsWith(`${userId}/`)) throw new Error("Bu fişe erişim izniniz yok.")
+
+  const { data, error } = await supabase.storage
+    .from("receipts")
+    .createSignedUrl(receipt.filePath, 60 * 10)
+
+  if (error) throw error
+  return data?.signedUrl || ""
+}
+
+export async function deleteReceiptFile(userId, receipt) {
+  if (!receipt?.id) return
+  const { error } = await supabase
+    .from("receipts")
+    .delete()
+    .eq("id", receipt.id)
+    .eq("user_id", userId)
+
+  if (error) throw error
+  if (receipt.filePath?.startsWith(`${userId}/`)) {
+    await supabase.storage.from("receipts").remove([receipt.filePath])
+  }
+}
+
+function sanitizeStorageName(value) {
+  return String(value || "receipt")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 90) || "receipt"
 }
 
 function buildLocalCoachResponse(message, summary) {
