@@ -1,37 +1,40 @@
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { S, FONT_BODY, FONT_MONO, btnPrimary, btnGhost } from "../../constants/theme"
 
-const features = [
-  {
-    title: "Akıllı Takip",
-    body: "Gelir, gider ve kategori akışınızı tek bir panelde berrak biçimde yönetin.",
-    icon: "↗",
-    color: S.green,
-  },
-  {
-    title: "Raporlama",
-    body: "Aylık trendleri, bütçe risklerini ve nakit akışını görsel olarak okuyun.",
-    icon: "▥",
-    color: S.cyan,
-  },
-  {
-    title: "Hedef Yönetimi",
-    body: "Birikim hedeflerinizi takip edin, limit aşımına yaklaşmadan önlem alın.",
-    icon: "◎",
-    color: S.rose,
-  },
-  {
-    title: "AI Finans Koçu",
-    body: "Harcamalarınızı optimize eden kişisel öneriler ve risk analizleri alın.",
-    icon: "✦",
-    color: S.green,
-  },
+const dashTxs = [
+  { icon: "↗", name: "Maaş Ödemesi",      date: "Dün, 18:00",   amount: "+₺8.500,00", color: S.green },
+  { icon: "◻", name: "Market Alışverişi", date: "2 saat önce",  amount: "-₺340,00",   color: S.text  },
+  { icon: "◻", name: "Netflix",            date: "7 gün önce",   amount: "-₺89,90",    color: S.text  },
 ]
 
-const transactions = [
-  { name: "Premium Coffee Roasters", meta: "Bugün, 09:42", amount: "-₺145.00", tone: S.text, icon: "▣" },
-  { name: "Maaş Ödemesi", meta: "Dün, 18:00", amount: "+₺85,400.00", tone: S.green, icon: "↗" },
-  { name: "Enerji Faturası", meta: "15 Haz 2026", amount: "-₺1,240.00", tone: S.text, icon: "ϟ" },
+const bentoTxs = [
+  { name: "Maaş Ödemesi",    amount: "+₺8.500,00", color: S.green },
+  { name: "Market Alışveriş", amount: "-₺340,00",   color: S.rose  },
+  { name: "Elektrik Faturası",amount: "-₺1.240,00", color: S.rose  },
+]
+
+const testimonials = [
+  {
+    text: "BudgetFlow sayesinde aylık harcamalarımı tam kontrol altına aldım. AI koç özelliği gerçekten fark yaratıyor.",
+    name: "Zeynep K.",
+    role: "Yazılım Geliştirici",
+    avatar: "ZK",
+    stars: 5,
+  },
+  {
+    text: "Abonelik ve faturalarımı takip etmek artık çok kolay. Her ay ne kadar tasarruf ettiğimi net görüyorum.",
+    name: "Mehmet D.",
+    role: "Girişimci",
+    avatar: "MD",
+    stars: 5,
+  },
+  {
+    text: "Finansal hedeflerime ulaşmak için mükemmel bir araç. Raporlar ve grafikler çok anlaşılır.",
+    name: "Ayşe Ş.",
+    role: "Finans Uzmanı",
+    avatar: "AŞ",
+    stars: 5,
+  },
 ]
 
 const plans = [
@@ -64,119 +67,262 @@ const plans = [
 export default function LandingPage({ onLogin, onSignup }) {
   const [billing, setBilling] = useState("yearly")
   const yearly = billing === "yearly"
+  const navRef = useRef(null)
 
-  const planPrice = (monthly) => `₺${yearly ? Math.round(monthly * 0.8) : monthly}`
+  const planPrice = (m) => `₺${yearly ? Math.round(m * 0.8) : m}`
+
+  useEffect(() => {
+    const nav = navRef.current
+    const onScroll = () => nav?.classList.toggle("is-scrolled", window.scrollY > 20)
+    window.addEventListener("scroll", onScroll, { passive: true })
+
+    const animateCounter = (el, target, prefix, suffix, isFloat) => {
+      const start = performance.now()
+      const tick = (now) => {
+        const p = Math.min((now - start) / 1600, 1)
+        const e = 1 - Math.pow(1 - p, 3)
+        el.textContent = prefix + (isFloat ? (e * target).toFixed(1) : Math.floor(e * target)) + suffix
+        if (p < 1) requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return
+          entry.target.classList.add("is-visible")
+          if (entry.target.classList.contains("lp-stats")) {
+            const ss = entry.target.querySelectorAll("strong")
+            const defs = [
+              [ss[0], 500, "",  "K+", false],
+              [ss[1], 12,  "₺", "B+", false],
+              [ss[2], 99,  "%", ".9", false],
+              [ss[3], 4.9, "",  "/5", true ],
+            ]
+            defs.forEach(([el, ...args]) => el && animateCounter(el, ...args))
+          }
+          observer.unobserve(entry.target)
+        })
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -48px 0px" }
+    )
+
+    document.querySelectorAll(".lp-reveal").forEach((el) => observer.observe(el))
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener("scroll", onScroll)
+    }
+  }, [])
 
   return (
     <div className="public-page" style={{ fontFamily: FONT_BODY }}>
-      <nav className="public-nav">
+
+      {/* ── NAV ───────────────────────────────────────────────────── */}
+      <nav className="public-nav" ref={navRef}>
         <button className="public-brand" onClick={onSignup} type="button" aria-label="BudgetFlow">
           <span className="public-brand-mark">BF</span>
           <span>BudgetFlow</span>
         </button>
-        <div className="public-nav-links" aria-label="Tanıtım menüsü">
+        <div className="public-nav-links" aria-label="Navigasyon">
           <a href="#features">Özellikler</a>
-          <a href="#insights">Çözümler</a>
           <a href="#plans">Planlar</a>
           <a href="#security">Güvenlik</a>
-          <a href="#contact">Kaynaklar</a>
+          <a href="#contact">İletişim</a>
         </div>
         <div className="public-nav-actions">
-          <button onClick={onLogin} type="button" className="public-link-button">
-            Giriş Yap
-          </button>
+          <button onClick={onLogin} type="button" className="public-link-button">Giriş Yap</button>
           <button onClick={onSignup} type="button" style={{ ...btnPrimary, padding: "10px 20px" }}>
             Hemen Başla
           </button>
         </div>
       </nav>
 
-      <main className="public-main">
-        <section className="landing-hero">
-          <div className="landing-kicker">
-            <span>✦</span>
-            Yeni: AI Finans Koçu v2.0 Yayında
-          </div>
-          <h1>
-            Finansal Özgürlüğünüzü <span>Tasarlayın</span>
-          </h1>
-          <p>
-            Gelir ve giderlerinizi yüksek netlikle takip edin, hedeflerinize daha hızlı ulaşmak için kişiselleştirilmiş finansal stratejiler oluşturun.
-          </p>
-          <div className="landing-actions">
-            <button onClick={onSignup} type="button" style={{ ...btnPrimary, padding: "15px 28px", fontSize: 15 }}>
-              Hemen Başlayın →
-            </button>
-            <button onClick={onLogin} type="button" style={{ ...btnGhost, padding: "15px 28px", fontSize: 15 }}>
-              Giriş Yap
-            </button>
-          </div>
+      <main className="lp-main">
 
-          <div className="landing-bento" aria-label="BudgetFlow uygulama önizlemesi">
-            <div className="landing-preview glass-card">
-              <div className="preview-topbar">
-                <span />
-                <span />
-                <span />
+        {/* ── HERO ──────────────────────────────────────────────────── */}
+        <section className="lp-hero">
+          <div className="lp-orb lp-orb-1" aria-hidden="true" />
+          <div className="lp-orb lp-orb-2" aria-hidden="true" />
+          <div className="lp-orb lp-orb-3" aria-hidden="true" />
+
+          <div className="lp-hero-inner">
+
+            {/* Left: text */}
+            <div className="lp-hero-left">
+              <div className="landing-kicker lp-enter" style={{ animationDelay: "0ms" }}>
+                <span>✦</span> Yeni: AI Finans Koçu v2.0 Yayında
               </div>
-              <div className="preview-chart">
-                {[26, 34, 42, 36, 52, 66, 58, 74, 88].map((height, index) => (
-                  <i key={index} style={{ height: `${height}%` }} />
-                ))}
-                <svg viewBox="0 0 460 240" role="img" aria-label="Yükselen portföy grafiği">
-                  <path d="M35 188 C110 172 128 138 184 150 C242 164 258 90 316 104 C368 114 388 62 426 48" />
-                </svg>
+
+              <h1 className="lp-enter" style={{ animationDelay: "120ms" }}>
+                Bütçenizi<br />
+                <span className="lp-shimmer-text">Akıllıca</span><br />
+                Yönetin
+              </h1>
+
+              <p className="lp-enter" style={{ animationDelay: "240ms" }}>
+                Gelir, gider ve yatırımlarınızı tek platformda takip edin. AI destekli analizlerle finansal hedeflerinize çok daha hızlı ulaşın.
+              </p>
+
+              <div className="lp-hero-cta lp-enter" style={{ animationDelay: "360ms" }}>
+                <button onClick={onSignup} type="button" style={{ ...btnPrimary, padding: "14px 26px", fontSize: 14 }}>
+                  Ücretsiz Başla →
+                </button>
+                <button onClick={onLogin} type="button" style={{ ...btnGhost, padding: "14px 26px", fontSize: 14 }}>
+                  Giriş Yap
+                </button>
               </div>
-              <div className="preview-copy">
-                <div>Canlı Veri Analizi</div>
-                <strong>Portföyünüzü Gerçek Zamanlı İzleyin</strong>
+
+              <div className="lp-trust lp-enter" style={{ animationDelay: "480ms" }}>
+                <div className="lp-avatars">
+                  {["ZK", "MD", "AŞ", "KB"].map((a) => <span key={a}>{a}</span>)}
+                </div>
+                <span>+47.000 kişi kullanıyor</span>
+                <div className="lp-stars">★★★★★ <small>4.9/5</small></div>
               </div>
             </div>
 
-            <div className="landing-side">
-              <div className="glass-card landing-mini-card">
-                <div className="mini-icon">₺</div>
-                <div className="finance-number" style={{ fontFamily: FONT_MONO }}>₺42.500,00</div>
-                <span>Aylık Tasarruf Hedefi</span>
+            {/* Right: dashboard mockup */}
+            <div className="lp-hero-right lp-enter" style={{ animationDelay: "300ms" }}>
+              <div className="lp-dash-mock glass-card">
+                <div className="lp-dash-chrome">
+                  <span /><span /><span />
+                  <span className="lp-dash-chrome-title">BudgetFlow</span>
+                </div>
+
+                <div className="lp-dash-balance">
+                  <div>
+                    <small>Toplam Varlık</small>
+                    <strong style={{ fontFamily: FONT_MONO }}>₺284.750,00</strong>
+                  </div>
+                  <div className="lp-dash-change">
+                    <span className="lp-dash-arrow">↑</span>
+                    <span>+₺12.400 bu ay</span>
+                  </div>
+                </div>
+
+                <div className="lp-dash-chart">
+                  {[26, 34, 42, 36, 52, 66, 58, 74, 88].map((h, i) => (
+                    <i key={i} style={{ height: `${h}%` }} />
+                  ))}
+                  <svg viewBox="0 0 460 130" preserveAspectRatio="none" aria-hidden="true">
+                    <path
+                      className="lp-chart-path"
+                      d="M53 96 C67 93 80 89 94 86 C108 82 122 78 136 75 C150 72 163 80 177 83 C191 76 205 69 219 62 C233 56 246 50 260 44 C274 40 287 52 301 55 C315 48 329 41 343 34 C357 28 370 22 384 16"
+                    />
+                  </svg>
+                </div>
+
+                <div className="lp-dash-txs">
+                  {dashTxs.map((tx) => (
+                    <div className="lp-dash-tx" key={tx.name}>
+                      <span style={{ color: tx.color, background: `${tx.color}18` }}>{tx.icon}</span>
+                      <div>
+                        <strong>{tx.name}</strong>
+                        <small>{tx.date}</small>
+                      </div>
+                      <b style={{ color: tx.color, fontFamily: FONT_MONO }}>{tx.amount}</b>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Floating mini cards */}
+              <div className="lp-float-card lp-float-savings glass-card">
+                <small>Tasarruf Hedefi</small>
+                <strong style={{ fontFamily: FONT_MONO }}>₺42.500</strong>
                 <div className="mini-progress"><i /></div>
               </div>
-              <div className="glass-card landing-ai-card">
-                <div className="ai-wave" />
-                <strong>AI Koçu</strong>
-                <span>Harcamalarınızı optimize eden akıllı algoritmalar.</span>
+              <div className="lp-float-card lp-float-ai glass-card">
+                <span>✦ AI İçgörü</span>
+                <p>Bu ay %18 tasarruf potansiyeli</p>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="landing-section" id="features">
-          <div className="landing-section-head">
-            <div>
-              <h2>Finansal Geleceğiniz İçin Akıllı Araçlar</h2>
-              <p>Karmaşık finansal verileri akışkan ve berrak bir deneyime dönüştürüyoruz.</p>
-            </div>
-            <div className="landing-arrow-set" aria-hidden="true">
-              <span>‹</span>
-              <span>›</span>
-            </div>
-          </div>
-          <div className="feature-grid">
-            {features.map((feature) => (
-              <article className="glass-card feature-card" key={feature.title}>
-                <div style={{ color: feature.color, background: `${feature.color}18` }}>{feature.icon}</div>
-                <h3>{feature.title}</h3>
-                <p>{feature.body}</p>
-              </article>
+        {/* ── LOGOS STRIP ───────────────────────────────────────────── */}
+        <div className="lp-logos-strip">
+          <span>Desteklenen finansal kurumlar</span>
+          <div className="lp-logos-row">
+            {["Ziraat Bankası", "Garanti BBVA", "İş Bankası", "Yapı Kredi", "Akbank"].map((l) => (
+              <span key={l}>{l}</span>
             ))}
+          </div>
+        </div>
+
+        {/* ── FEATURES BENTO ───────────────────────────────────────── */}
+        <section className="lp-features" id="features">
+          <div className="lp-section-head lp-reveal">
+            <span className="lp-section-label">Özellikler</span>
+            <h2>Her şeyi tek platformda yönetin</h2>
+            <p>Karmaşık finansal verileri akışkan ve berrak bir deneyime dönüştürüyoruz.</p>
+          </div>
+
+          <div className="lp-bento">
+            {/* Wide: Akıllı Takip */}
+            <article className="glass-card lp-bento-card lp-bento-wide lp-reveal">
+              <div className="lp-bento-icon" style={{ color: S.green, background: `${S.green}18` }}>↗</div>
+              <h3>Akıllı Takip</h3>
+              <p>Gelir, gider ve kategori akışınızı tek bir panelde berrak biçimde yönetin. Gerçek zamanlı verilerle her zaman bir adım önde olun.</p>
+              <div className="lp-bento-bars">
+                {[35, 52, 44, 68, 60, 76, 82].map((h, i) => (
+                  <i key={i} style={{ height: `${h}%` }} />
+                ))}
+              </div>
+            </article>
+
+            {/* Small: Raporlama */}
+            <article className="glass-card lp-bento-card lp-reveal">
+              <div className="lp-bento-icon" style={{ color: S.cyan, background: `${S.cyan}18` }}>▥</div>
+              <h3>Raporlama</h3>
+              <p>Aylık trendleri, bütçe risklerini ve nakit akışını görsel olarak okuyun.</p>
+              <div className="lp-bento-report">
+                {[60, 80, 45, 90, 70].map((w, i) => (
+                  <div key={i} className="lp-report-bar">
+                    <div style={{ width: `${w}%`, background: `linear-gradient(90deg, ${S.cyan}55, ${S.cyan})` }} />
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            {/* Small: AI Koç */}
+            <article className="glass-card lp-bento-card lp-bento-ai-card lp-reveal">
+              <div className="ai-wave" aria-hidden="true" />
+              <div className="lp-bento-icon" style={{ color: S.green, background: `${S.green}18`, position: "relative", zIndex: 1 }}>✦</div>
+              <h3 style={{ position: "relative", zIndex: 1 }}>AI Finans Koçu</h3>
+              <p style={{ position: "relative", zIndex: 1 }}>Harcamalarınızı optimize eden kişisel öneriler ve risk analizleri alın.</p>
+              <div className="lp-bento-ai-tip" style={{ position: "relative", zIndex: 1 }}>
+                <span>✦</span>
+                <small>Bu ay abonelik giderlerini %23 azaltabilirsiniz.</small>
+              </div>
+            </article>
+
+            {/* Wide: İşlemler */}
+            <article className="glass-card lp-bento-card lp-bento-wide lp-reveal">
+              <div className="lp-bento-icon" style={{ color: S.cyan, background: `${S.cyan}18` }}>≡</div>
+              <h3>Anlık İşlem Takibi</h3>
+              <p>Tüm banka hesaplarınızdaki işlemleri tek ekranda görün ve kategorize edin.</p>
+              <div className="lp-bento-txs">
+                {bentoTxs.map((tx) => (
+                  <div className="lp-bento-tx" key={tx.name}>
+                    <span>{tx.name}</span>
+                    <b style={{ color: tx.color, fontFamily: FONT_MONO }}>{tx.amount}</b>
+                  </div>
+                ))}
+              </div>
+            </article>
           </div>
         </section>
 
-        <section className="glass-card landing-stats" id="security">
+        {/* ── STATS ─────────────────────────────────────────────────── */}
+        <section className="lp-stats lp-reveal" id="security">
           {[
-            ["500K+", "Aktif Kullanıcı", S.text],
+            ["500K+", "Aktif Kullanıcı",  S.text ],
             ["₺12B+", "Yönetilen Varlık", S.green],
-            ["%99.9", "Güvenlik Skoru", S.text],
-            ["4.9/5", "App Store Puanı", S.cyan],
+            ["%99.9", "Güvenlik Skoru",   S.text ],
+            ["4.9/5", "App Store Puanı",  S.cyan ],
           ].map(([value, label, color]) => (
             <div key={label}>
               <strong className="finance-number" style={{ color }}>{value}</strong>
@@ -185,24 +331,38 @@ export default function LandingPage({ onLogin, onSignup }) {
           ))}
         </section>
 
-        <section className="landing-section landing-pricing" id="plans">
-          <div className="landing-pricing-head">
-            <span>BudgetFlow Plans</span>
+        {/* ── TESTIMONIALS ─────────────────────────────────────────── */}
+        <section className="lp-testimonials lp-reveal">
+          <div className="lp-section-head" style={{ marginBottom: "2.5rem" }}>
+            <span className="lp-section-label">Kullanıcı Yorumları</span>
+            <h2>Binlerce kullanıcı güveniyor</h2>
+          </div>
+          <div className="lp-testi-grid">
+            {testimonials.map((t) => (
+              <article className="glass-card lp-testi-card" key={t.name}>
+                <div className="lp-testi-stars">{"★".repeat(t.stars)}</div>
+                <p className="lp-testi-quote">"{t.text}"</p>
+                <div className="lp-testi-author">
+                  <span className="lp-testi-avatar">{t.avatar}</span>
+                  <div>
+                    <strong className="lp-testi-name">{t.name}</strong>
+                    <small className="lp-testi-role">{t.role}</small>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        {/* ── PRICING ───────────────────────────────────────────────── */}
+        <section className="lp-pricing-wrap lp-reveal" id="plans">
+          <div className="lp-section-head" style={{ marginBottom: "2.5rem" }}>
+            <span className="lp-section-label">Fiyatlandırma</span>
             <h2>Planınızı Seçin</h2>
-            <p>Size en uygun bütçe yönetimi deneyimini seçin. İstersen ücretsiz başlayın, ihtiyaç büyüdükçe daha güçlü araçlara geçin.</p>
-            <div className="landing-billing-pill" role="group" aria-label="Faturalandırma dönemi">
-              <button
-                type="button"
-                className={billing === "monthly" ? "is-active" : ""}
-                onClick={() => setBilling("monthly")}
-              >
-                Aylık
-              </button>
-              <button
-                type="button"
-                className={billing === "yearly" ? "is-active" : ""}
-                onClick={() => setBilling("yearly")}
-              >
+            <p>Ücretsiz başlayın, ihtiyaç büyüdükçe daha güçlü araçlara geçin.</p>
+            <div className="landing-billing-pill" role="group" aria-label="Faturalandırma" style={{ marginTop: "1.5rem" }}>
+              <button type="button" className={billing === "monthly" ? "is-active" : ""} onClick={() => setBilling("monthly")}>Aylık</button>
+              <button type="button" className={billing === "yearly"  ? "is-active" : ""} onClick={() => setBilling("yearly")}>
                 Yıllık <small>-%20</small>
               </button>
             </div>
@@ -223,8 +383,8 @@ export default function LandingPage({ onLogin, onSignup }) {
                   )}
                 </div>
                 <ul>
-                  {plan.features.map((feature) => (
-                    <li key={feature}><span>✓</span>{feature}</li>
+                  {plan.features.map((f) => (
+                    <li key={f}><span>✓</span>{f}</li>
                   ))}
                 </ul>
                 <button
@@ -239,38 +399,20 @@ export default function LandingPage({ onLogin, onSignup }) {
           </div>
         </section>
 
-        <section className="landing-insight" id="insights">
-          <div className="glass-card landing-transactions">
-            <div className="transactions-title">
-              <strong>Son İşlemler</strong>
-              <span>≡</span>
-            </div>
-            {transactions.map((item) => (
-              <div className="landing-tx-row" key={item.name}>
-                <span>{item.icon}</span>
-                <div>
-                  <strong>{item.name}</strong>
-                  <small>{item.meta}</small>
-                </div>
-                <b className="finance-number" style={{ color: item.tone }}>{item.amount}</b>
-              </div>
-            ))}
-          </div>
-          <div>
-            <span className="landing-label">Kontrol Sizin Elinizde</span>
-            <h2>Her Kuruşun Hikayesini <span>Görün</span></h2>
-            <p>
-              Gelişmiş kategorizasyon sayesinde harcamalarınız okunabilir hale gelir. Paranızı nereye harcadığınızı değil, nereye yönlendireceğinizi düşünün.
-            </p>
-            <ul>
-              <li>Otomatik banka entegrasyonu</li>
-              <li>Kişiselleştirilmiş bütçe limitleri</li>
-              <li>Anlık harcama bildirimleri</li>
-            </ul>
-          </div>
+        {/* ── FINAL CTA ─────────────────────────────────────────────── */}
+        <section className="lp-final-cta lp-reveal">
+          <div className="lp-cta-glow" aria-hidden="true" />
+          <span className="lp-section-label">Başlamak ücretsiz</span>
+          <h2>Finansal özgürlüğünüze<br /><span>bugün başlayın</span></h2>
+          <p>Ücretsiz hesap oluşturun, kredi kartı gerekmez. İlk 30 gün premium özellikleri ücretsiz deneyin.</p>
+          <button onClick={onSignup} type="button" style={{ ...btnPrimary, padding: "16px 36px", fontSize: 15 }}>
+            Ücretsiz Hesap Oluştur →
+          </button>
         </section>
+
       </main>
 
+      {/* ── FOOTER ────────────────────────────────────────────────── */}
       <footer className="public-footer" id="contact">
         <div>
           <strong>BudgetFlow</strong>

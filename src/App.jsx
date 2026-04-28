@@ -57,6 +57,7 @@ export default function App() {
   const [receipts, setReceipts] = useState([])
   const [aiInsights, setAiInsights] = useState([])
   const [aiMessages, setAiMessages] = useState([])
+  const [currentAiConversationId, setCurrentAiConversationId] = useState(null)
   const [profile, setProfile] = useState(null)
   const [view, setView] = useState("dashboard")
   const [dataLoading, setDataLoading] = useState(false)
@@ -130,7 +131,6 @@ export default function App() {
         setRecurringRules(data.recurringRules)
         setReceipts(data.receipts || [])
         setAiInsights(data.aiInsights)
-        setAiMessages(data.aiMessages)
         setHasLoadedData(true)
       })
       .catch((err) => {
@@ -154,6 +154,9 @@ export default function App() {
   }, [userId])
 
   useEffect(() => {
+    setAiMessages([])
+    setCurrentAiConversationId(null)
+
     if (!user) {
       refreshSeqRef.current += 1
       refreshPromiseRef.current = null
@@ -165,6 +168,7 @@ export default function App() {
       setReceipts([])
       setAiInsights([])
       setAiMessages([])
+      setCurrentAiConversationId(null)
       setProfile(null)
       setHasLoadedData(false)
       setDataLoading(false)
@@ -201,6 +205,16 @@ export default function App() {
     setNotice(message)
     setError("")
   }
+
+  useEffect(() => {
+    if (!notice) return undefined
+    const timeoutId = window.setTimeout(() => setNotice(""), 4000)
+    return () => window.clearTimeout(timeoutId)
+  }, [notice])
+
+  useEffect(() => {
+    setNotice("")
+  }, [view])
 
   const openAddTx = () => {
     setTxForm({
@@ -566,7 +580,10 @@ export default function App() {
       { id: `local-user-${Date.now()}`, role: "user", content: message, createdAt: new Date().toISOString() },
     ])
     try {
-      const data = await sendCoachMessage(user.id, message, summary)
+      const data = await sendCoachMessage(user.id, message, summary, currentAiConversationId)
+      if (data?.conversationId) {
+        setCurrentAiConversationId(data.conversationId)
+      }
       if (data?.reply) {
         setAiMessages((prev) => [
           ...prev,
@@ -582,6 +599,11 @@ export default function App() {
     } catch (err) {
       showError(err.message || "AI Koç yanıt veremedi.")
     }
+  }
+
+  const handleNewAiChat = () => {
+    setAiMessages([])
+    setCurrentAiConversationId(null)
   }
 
   const exportCSV = () => {
@@ -848,6 +870,7 @@ export default function App() {
                   aiMessages={aiMessages}
                   aiInsights={aiInsights}
                   onAskCoach={handleAskCoach}
+                  onNewChat={handleNewAiChat}
                 />
               )}
               {view === "account" && (

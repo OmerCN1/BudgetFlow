@@ -132,6 +132,7 @@ const toAiInsight = (row) => ({
 
 const toAiMessage = (row) => ({
   id: row.id,
+  conversationId: row.conversation_id || "",
   role: row.role,
   content: row.content,
   createdAt: row.created_at,
@@ -1151,18 +1152,43 @@ export async function createTransactionFromRule(userId, rule) {
   return transaction
 }
 
-export async function sendCoachMessage(userId, message, summary) {
+async function ensureAiConversation(userId, conversationId) {
+  if (conversationId) return conversationId
+
+  const { data, error } = await supabase
+    .from("ai_conversations")
+    .insert({ user_id: userId, title: "AI Koç" })
+    .select("id")
+    .single()
+
+  if (error) {
+    if (isSchemaMissing(error)) return null
+    throw error
+  }
+
+  return data?.id || null
+}
+
+export async function sendCoachMessage(userId, message, summary, conversationId = null) {
   const { data, error } = await supabase.functions.invoke("ai-coach", {
     body: { message, summary },
   })
 
   const response = error ? buildLocalCoachResponse(message, summary) : data
+  const activeConversationId = await ensureAiConversation(userId, conversationId)
 
   if (response?.reply) {
-    const { error: messageError } = await supabase.from("ai_messages").insert([
+    const messageRows = [
       { user_id: userId, role: "user", content: message },
       { user_id: userId, role: "assistant", content: response.reply },
-    ])
+    ].map((row) => activeConversationId ? { ...row, conversation_id: activeConversationId } : row)
+
+    let { error: messageError } = await supabase.from("ai_messages").insert(messageRows)
+    if (messageError && isSchemaMissing(messageError) && activeConversationId) {
+      const fallbackRows = messageRows.map(({ conversation_id, ...row }) => row)
+      const fallbackResult = await supabase.from("ai_messages").insert(fallbackRows)
+      messageError = fallbackResult.error
+    }
     if (messageError && !isSchemaMissing(messageError)) throw messageError
   }
 
@@ -1179,7 +1205,7 @@ export async function sendCoachMessage(userId, message, summary) {
     if (insightError && !isSchemaMissing(insightError)) throw insightError
   }
 
-  return response
+  return { ...response, conversationId: activeConversationId }
 }
 
 export async function extractReceiptFromImage(imageDataUrl, fileName) {
