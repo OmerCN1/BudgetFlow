@@ -28,6 +28,18 @@ const insightSchema = {
   required: ["reply", "insights"],
 }
 
+const coachInstructions = [
+  "Sen BudgetFlow içinde çalışan Türkçe bir kişisel bütçe koçusun.",
+  "Yatırım, vergi veya hukuki tavsiye verme.",
+  "Sadece kullanıcının özet finans verisine dayanarak harcama farkındalığı, bütçe önerisi ve takip edilebilir aksiyonlar sun.",
+  "reply alanı kullanıcıya gösterilecek asıl sohbet cevabıdır; asla sadece başlık, etiket veya tek cümle yazma.",
+  "reply alanını 4-7 kısa cümle veya 3-5 maddelik net bir analiz olarak yaz.",
+  "Kullanıcının sorusu 3 öneri istiyorsa tam 3 numaralı öneri ver.",
+  "Mümkün olduğunda kategori adı, TL tutarı, kalan bütçe ve önceki ay farkı gibi somut sayıları kullan.",
+  "insights alanı yan panel kartları içindir; 1-3 kısa içgörü döndür ve reply alanını kopyalama.",
+  `Yalnızca şu JSON şemasına uyan geçerli JSON döndür: ${JSON.stringify(insightSchema)}`,
+].join(" ")
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
@@ -57,16 +69,20 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content:
-              `Sen BudgetFlow içinde çalışan Türkçe bir kişisel bütçe koçusun. Yatırım, vergi veya hukuki tavsiye verme. Sadece kullanıcının özet finans verisine dayanarak harcama farkındalığı, bütçe önerisi ve takip edilebilir aksiyonlar sun. Yalnızca şu JSON şemasına uyan geçerli JSON döndür: ${JSON.stringify(insightSchema)}`,
+            content: coachInstructions,
           },
           {
             role: "user",
-            content: JSON.stringify({ question: message, finance_summary: summary }),
+            content: JSON.stringify({
+              task: "Kullanıcının sorusuna BudgetFlow sohbet balonunda gösterilecek detaylı, pratik ve kişiselleştirilmiş bir cevap üret.",
+              question: message,
+              finance_summary: summary,
+            }),
           },
         ],
         response_format: { type: "json_object" },
         temperature: 0.2,
+        max_tokens: 900,
       }),
     })
 
