@@ -498,7 +498,7 @@ async function seedPresentationData(userId, categoryIdMap) {
       user_id: userId,
       role: "assistant",
       content:
-        "Demo veriniz hazır. Şimdilik yerel analiz modundayım; OpenAI Edge Function bağlandığında daha derin kişisel öneriler verebilirim.",
+        "Demo veriniz hazır. Şimdilik yerel analiz modundayım; Groq Edge Function bağlandığında daha derin kişisel öneriler verebilirim.",
     },
   ])
   if (messageError && !isSchemaMissing(messageError)) throw messageError
@@ -1342,7 +1342,7 @@ function buildLocalCoachResponse(message, summary) {
       {
         type: "setup",
         title: "AI Koç yerel modda",
-        body: "OpenAI destekli yanıt için Supabase Edge Function deploy edin ve OPENAI_API_KEY secret ekleyin.",
+        body: "Groq destekli yanıt için Supabase Edge Function deploy edin ve GROQ_API_KEY secret ekleyin.",
         severity: "warning",
       },
       {

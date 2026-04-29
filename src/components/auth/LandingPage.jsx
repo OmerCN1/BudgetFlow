@@ -270,6 +270,22 @@ export default function LandingPage({ onLogin, onSignup }) {
                 {[35, 52, 44, 68, 60, 76, 82].map((h, i) => (
                   <i key={i} style={{ height: `${h}%` }} />
                 ))}
+                <svg viewBox="0 0 300 100" preserveAspectRatio="none" aria-hidden="true">
+                  <defs>
+                    <linearGradient id="bentoAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#4edea3" stopOpacity="0.22" />
+                      <stop offset="100%" stopColor="#4edea3" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <path
+                    className="lp-bento-chart-area"
+                    d="M26,65 C42,56 51,48 67,48 C83,48 93,56 109,56 C125,40 137,32 150,32 C163,32 175,40 191,40 C207,29 220,24 233,24 C249,18 262,18 274,18 L274,100 L26,100 Z"
+                  />
+                  <path
+                    className="lp-bento-chart-path"
+                    d="M26,65 C42,56 51,48 67,48 C83,48 93,56 109,56 C125,40 137,32 150,32 C163,32 175,40 191,40 C207,29 220,24 233,24 C249,18 262,18 274,18"
+                  />
+                </svg>
               </div>
             </article>
 

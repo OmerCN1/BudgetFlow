@@ -33,11 +33,11 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders })
   }
 
-  const apiKey = Deno.env.get("OPENAI_API_KEY")
+  const apiKey = Deno.env.get("GROQ_API_KEY")
   if (!apiKey) {
     return Response.json(
       {
-        reply: "AI Koç şu an yapılandırılmamış. Supabase Edge Function ortamına OPENAI_API_KEY ekleyin.",
+        reply: "AI Koç şu an yapılandırılmamış. Supabase Edge Function ortamına GROQ_API_KEY ekleyin.",
         insights: [],
       },
       { headers: corsHeaders }
@@ -46,33 +46,27 @@ serve(async (req) => {
 
   try {
     const { message, summary } = await req.json()
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: Deno.env.get("OPENAI_MODEL") || "gpt-5.4-mini",
-        input: [
+        model: Deno.env.get("GROQ_MODEL") || "llama-3.1-8b-instant",
+        messages: [
           {
             role: "system",
             content:
-              "Sen BudgetFlow içinde çalışan Türkçe bir kişisel bütçe koçusun. Yatırım, vergi veya hukuki tavsiye verme. Sadece kullanıcının özet finans verisine dayanarak harcama farkındalığı, bütçe önerisi ve takip edilebilir aksiyonlar sun.",
+              `Sen BudgetFlow içinde çalışan Türkçe bir kişisel bütçe koçusun. Yatırım, vergi veya hukuki tavsiye verme. Sadece kullanıcının özet finans verisine dayanarak harcama farkındalığı, bütçe önerisi ve takip edilebilir aksiyonlar sun. Yalnızca şu JSON şemasına uyan geçerli JSON döndür: ${JSON.stringify(insightSchema)}`,
           },
           {
             role: "user",
             content: JSON.stringify({ question: message, finance_summary: summary }),
           },
         ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "budget_coach_response",
-            strict: true,
-            schema: insightSchema,
-          },
-        },
+        response_format: { type: "json_object" },
+        temperature: 0.2,
       }),
     })
 
@@ -82,7 +76,8 @@ serve(async (req) => {
     }
 
     const payload = await response.json()
-    const outputText = payload.output_text || payload.output?.[0]?.content?.[0]?.text
+    const outputText = payload.choices?.[0]?.message?.content
+    if (!outputText) throw new Error("Groq boş yanıt döndürdü.")
     const parsed = JSON.parse(outputText)
 
     return Response.json(parsed, { headers: corsHeaders })
@@ -103,4 +98,3 @@ serve(async (req) => {
     )
   }
 })
-
