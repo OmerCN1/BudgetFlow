@@ -109,7 +109,7 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
     <div className="account-page">
       <section className="account-hero">
         <div className="account-identity">
-          <div className="account-avatar">
+          <div className="account-avatar account-avatar-glow">
             <span>{initials}</span>
             <b>✓</b>
           </div>

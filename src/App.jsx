@@ -760,7 +760,7 @@ export default function App() {
       />
 
       <main className="app-main">
-        <div className="app-main-inner">
+        <div className="app-main-inner" key={view}>
           {(error || notice || actionLoading) && (
             <div style={{ marginBottom: 16 }}>
               {error && <Status tone="error">{error}</Status>}

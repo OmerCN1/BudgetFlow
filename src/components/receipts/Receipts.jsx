@@ -74,29 +74,30 @@ export default function Receipts({
   const unlinkedCount = receipts.length - linkedCount
 
   return (
-    <div className="receipts-page">
-      <Card>
-        <div className="receipts-hero">
-          <div>
-            <FieldLabel>Belgeler</FieldLabel>
-            <h1>Fiş ve Fatura Arşivi</h1>
-            <p>{receipts.length} dosya saklanıyor · {unlinkedCount} dosya işleme bağlanmadı</p>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,.pdf,application/pdf"
-            onChange={async (event) => {
-              const file = event.target.files?.[0]
-              if (!file) return
-              await onUpload?.(file)
-              event.target.value = ""
-            }}
-            style={{ display: "none" }}
-          />
-          <button onClick={() => fileInputRef.current?.click()} style={btnPrimary}>Belge Yükle</button>
+    <div className="page-root">
+      <div className="page-header">
+        <div>
+          <span className="page-kicker">Belgeler</span>
+          <h1 className="page-title">Fiş ve Fatura Arşivi</h1>
+          <p className="page-subtitle">{receipts.length} dosya saklanıyor · {unlinkedCount} dosya işleme bağlanmadı</p>
         </div>
-
+        <div className="page-header-actions">
+          <button onClick={() => fileInputRef.current?.click()} style={btnPrimary}>+ Belge Yükle</button>
+        </div>
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,.pdf,application/pdf"
+        onChange={async (event) => {
+          const file = event.target.files?.[0]
+          if (!file) return
+          await onUpload?.(file)
+          event.target.value = ""
+        }}
+        style={{ display: "none" }}
+      />
+      <Card>
         <div className="receipts-stat-grid">
           {[
             { label: "Toplam Belge", value: receipts.length, color: S.cyan },

@@ -10,16 +10,15 @@ export default function Notifications({ txs, cats, goals, recurringRules, setVie
   const unreadCount = items.filter((item) => item.severity !== "info").length
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+    <div className="page-root">
+      <div className="page-header">
         <div>
-          <h1 style={{ color: S.text, fontSize: 28, lineHeight: 1.2, margin: 0 }}>Bildirim Merkezi</h1>
-          <div style={{ color: S.sub, fontSize: 13, marginTop: 6 }}>
-            Bütçe riskleri, yaklaşan abonelikler ve hedef ilerlemeleri burada toplanır.
-          </div>
+          <span className="page-kicker">Merkez</span>
+          <h1 className="page-title">Bildirim Merkezi</h1>
+          <p className="page-subtitle">Bütçe riskleri, yaklaşan abonelikler ve hedef ilerlemeleri burada toplanır.</p>
         </div>
-        <div className="glass-card" style={{ padding: "12px 16px", color: unreadCount ? S.amber : S.green, fontWeight: 800 }}>
-          {unreadCount} kritik uyarı
+        <div className="page-header-actions">
+          <span className="notification-count-badge">{unreadCount} kritik uyarı</span>
         </div>
       </div>
 
@@ -34,7 +33,7 @@ export default function Notifications({ txs, cats, goals, recurringRules, setVie
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
           {items.map((item) => (
-            <Card key={item.id} style={{ borderColor: `${toneColor(item.severity)}55` }}>
+            <Card key={item.id} className="notification-card-v2" style={{ borderColor: `${toneColor(item.severity)}55`, borderLeft: `3px solid ${toneColor(item.severity)}` }}>
               <div style={{ display: "grid", gridTemplateColumns: "auto minmax(0,1fr) auto", gap: 14, alignItems: "center" }}>
                 <div
                   style={{

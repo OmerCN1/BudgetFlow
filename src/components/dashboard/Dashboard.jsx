@@ -106,58 +106,30 @@ export default function Dashboard({ txs, cats, catById, setView }) {
   })
 
   return (
-    <div style={{ display: "grid", gap: 24 }}>
-      <section style={{ display: "flex", justifyContent: "space-between", gap: 20, alignItems: "flex-end", flexWrap: "wrap" }}>
+    <div className="page-root">
+      <section className="page-header">
         <div>
-          <div style={{ color: S.green, fontSize: 12, fontWeight: 800, letterSpacing: 0, textTransform: "uppercase", marginBottom: 10 }}>
-            Luminous Wealth
-          </div>
-          <h1 style={{ color: S.text, fontSize: 32, lineHeight: 1.2, fontWeight: 800, letterSpacing: 0 }}>
-            Finansal Özet
-          </h1>
-          <p style={{ color: S.sub, fontSize: 16, marginTop: 10 }}>
-            {monthLabel} itibarıyla varlık durumunuz.
-          </p>
+          <span className="page-kicker">{monthLabel}</span>
+          <h1 className="page-title">Finansal Özet</h1>
+          <p className="page-subtitle">Varlık ve harcama durumunuza genel bakış.</p>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          {[
-            ["month", "Bu Ay"],
-            ["quarter", "Son 3 Ay"],
-            ["year", "Yıl"],
-            ["all", "Tümü"],
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => setPeriod(value)}
-              style={{
-                background: period === value ? "rgba(78,222,163,0.16)" : "rgba(255,255,255,0.04)",
-                border: `1px solid ${period === value ? S.green : S.border}`,
-                color: period === value ? S.green : S.sub,
-                borderRadius: 8,
-                padding: "10px 12px",
-                cursor: "pointer",
-                fontFamily: FONT_BODY,
-                fontWeight: 800,
-              }}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="page-header-actions">
+          <div className="period-filter-group">
+            {[["month", "Bu Ay"], ["quarter", "Son 3 Ay"], ["year", "Yıl"], ["all", "Tümü"]].map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setPeriod(value)}
+                className={`period-filter-btn${period === value ? " is-active" : ""}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <button
             onClick={() => setView("transactions")}
-            style={{
-              background: "rgba(255,255,255,0.04)",
-              border: `1px solid ${S.border}`,
-              color: S.green,
-              borderRadius: 8,
-              padding: "10px 14px",
-              cursor: "pointer",
-              fontFamily: FONT_BODY,
-              fontWeight: 800,
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
-            }}
+            style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${S.border}`, color: S.green, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontFamily: FONT_BODY, fontWeight: 800, fontSize: 13 }}
           >
-            İşlem Merkezi
+            İşlem Merkezi →
           </button>
         </div>
       </section>
@@ -197,14 +169,16 @@ export default function Dashboard({ txs, cats, catById, setView }) {
         ].map((s, i) => (
           <Card
             key={i}
+            className="stagger-item"
             style={{
               minHeight: 178,
               display: "grid",
               alignContent: "space-between",
+              borderTop: `2px solid ${s.color}`,
               background:
                 i === 0
-                  ? "linear-gradient(135deg, rgba(78,222,163,0.12), rgba(255,255,255,0.045))"
-                  : "rgba(255,255,255,0.045)",
+                  ? "linear-gradient(135deg, rgba(78,222,163,0.1), rgba(255,255,255,0.04))"
+                  : "rgba(255,255,255,0.04)",
             }}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
@@ -247,8 +221,8 @@ export default function Dashboard({ txs, cats, catById, setView }) {
             </h2>
           </div>
 
-          <div style={{ display: "grid", gap: 20 }}>
-            <div style={{ border: `1px solid ${S.border}`, background: "rgba(9,16,12,0.54)", borderRadius: 8, padding: 18 }}>
+          <div style={{ display: "grid", gap: 14 }}>
+            <div className="metric-inset-card">
               <FieldLabel>Net Nakit Akışı</FieldLabel>
               <div className="finance-number" style={{ color: thisMonthTotals.net >= 0 ? S.green : S.red, fontSize: 20, fontWeight: 800 }}>
                 {thisMonthTotals.net >= 0 ? "+" : ""}
@@ -256,18 +230,18 @@ export default function Dashboard({ txs, cats, catById, setView }) {
               </div>
             </div>
 
-            <div style={{ border: `1px solid ${S.border}`, background: "rgba(9,16,12,0.54)", borderRadius: 8, padding: 18 }}>
+            <div className="metric-inset-card">
               <FieldLabel>En Büyük Gider</FieldLabel>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "baseline" }}>
-                <span style={{ color: S.text, fontSize: 15 }}>
+                <span style={{ color: S.text, fontSize: 14 }}>
                   {topThisMonthExpense?.name || "Henüz gider yok"}
                 </span>
-                <span className="finance-number" style={{ color: topThisMonthExpense?.color || S.muted, fontSize: 18, fontWeight: 800 }}>
+                <span className="finance-number" style={{ color: topThisMonthExpense?.color || S.muted, fontSize: 17, fontWeight: 800 }}>
                   {topThisMonthExpense ? TRY(topThisMonthExpense.value) : TRY(0)}
                 </span>
               </div>
-              <div style={{ color: S.muted, fontSize: 12, marginTop: 10 }}>
-                Geçen aya göre gider farkı{" "}
+              <div style={{ color: S.muted, fontSize: 11, marginTop: 8 }}>
+                Geçen aya göre{" "}
                 <span className="finance-number" style={{ color: thisMonthTotals.expense > lastMonthTotals.expense ? S.red : S.green }}>
                   {TRY(thisMonthTotals.expense - lastMonthTotals.expense)}
                 </span>
@@ -326,7 +300,10 @@ export default function Dashboard({ txs, cats, catById, setView }) {
 
       <section className="luminous-chart-grid charts-grid">
         <Card>
-          <FieldLabel>Aylık Gelir &amp; Gider Trendi</FieldLabel>
+          <div className="chart-card-header">
+            <p className="chart-card-title">Aylık Gelir &amp; Gider Trendi</p>
+            <span className="chart-card-meta">Son 6 ay</span>
+          </div>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart
               data={lineData}
@@ -402,7 +379,10 @@ export default function Dashboard({ txs, cats, catById, setView }) {
         </Card>
 
         <Card style={{ display: "flex", flexDirection: "column" }}>
-          <FieldLabel>Gider Dağılımı</FieldLabel>
+          <div className="chart-card-header">
+            <p className="chart-card-title">Gider Dağılımı</p>
+            <span className="chart-card-meta">Kategorilere göre</span>
+          </div>
           <ResponsiveContainer width="100%" height={180}>
             <PieChart>
               <Pie
@@ -497,7 +477,7 @@ export default function Dashboard({ txs, cats, catById, setView }) {
             marginBottom: 12,
           }}
         >
-          <FieldLabel>Son İşlemler</FieldLabel>
+          <p className="chart-card-title" style={{ marginBottom: 4 }}>Son İşlemler</p>
           <button
             onClick={() => setView("transactions")}
             style={{
@@ -522,13 +502,12 @@ export default function Dashboard({ txs, cats, catById, setView }) {
             return (
               <div
                 key={t.id}
+                className="tx-row"
                 style={{
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  padding: "9px 0",
-                  borderTop:
-                    i === 0 ? "none" : `1px solid ${S.border}30`,
+                  borderTop: i === 0 ? "none" : `1px solid ${S.border}30`,
                 }}
               >
                 <div

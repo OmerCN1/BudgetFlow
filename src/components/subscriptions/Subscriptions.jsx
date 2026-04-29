@@ -45,20 +45,26 @@ export default function Subscriptions({ cats, rules, onSaveRule, onCreateFromRul
   }
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 12 }}>
-        <Card>
-          <FieldLabel>Aktif Abonelik</FieldLabel>
-          <div className="finance-number" style={{ color: S.green, fontFamily: FONT_MONO, fontSize: 24, fontWeight: 800 }}>{subscriptions.length}</div>
-        </Card>
-        <Card>
-          <FieldLabel>Aylık Etki</FieldLabel>
-          <div className="finance-number" style={{ color: S.rose, fontFamily: FONT_MONO, fontSize: 24, fontWeight: 800 }}>{TRY(monthlyTotal)}</div>
-        </Card>
-        <Card>
-          <FieldLabel>Yıllık Tahmin</FieldLabel>
-          <div className="finance-number" style={{ color: S.cyan, fontFamily: FONT_MONO, fontSize: 24, fontWeight: 800 }}>{TRY(monthlyTotal * 12)}</div>
-        </Card>
+    <div className="page-root">
+      <div className="page-header">
+        <div>
+          <span className="page-kicker">Yönetim</span>
+          <h1 className="page-title">Abonelikler</h1>
+          <p className="page-subtitle">Tekrarlı giderleri takip edin ve nakit akışını önceden görün.</p>
+        </div>
+      </div>
+
+      <div className="stat-bar">
+        {[
+          { label: "Aktif Abonelik", value: subscriptions.length, color: S.green },
+          { label: "Aylık Etki", value: TRY(monthlyTotal), color: S.rose },
+          { label: "Yıllık Tahmin", value: TRY(monthlyTotal * 12), color: S.cyan },
+        ].map((stat) => (
+          <div key={stat.label} className="stat-bar-item stagger-item">
+            <span className="stat-bar-label">{stat.label}</span>
+            <span className="stat-bar-value" style={{ color: stat.color }}>{stat.value}</span>
+          </div>
+        ))}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "0.8fr 1.2fr", gap: 12 }}>
@@ -100,22 +106,31 @@ export default function Subscriptions({ cats, rules, onSaveRule, onCreateFromRul
             />
           ) : (
             <div style={{ display: "grid", gap: 10 }}>
-              {subscriptions.map((rule) => (
-                <div key={rule.id} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 12, alignItems: "center", border: `1px solid ${S.border}`, borderRadius: 8, padding: 12 }}>
-                  <div>
-                    <div style={{ color: S.text, fontWeight: 800 }}>{rule.name}</div>
-                    <div style={{ color: S.muted, fontSize: 12 }}>
-                      {rule.frequency === "monthly" ? "Aylık" : "Haftalık"} · sıradaki: {rule.nextDate}
+              {subscriptions.map((rule) => {
+                const daysUntil = rule.nextDate ? Math.ceil((new Date(rule.nextDate) - new Date()) / 86400000) : null
+                const isSoon = daysUntil !== null && daysUntil <= 7
+                return (
+                  <div key={rule.id} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 12, alignItems: "center", border: `1px solid ${S.border}`, borderRadius: 8, padding: 12 }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                        <span style={{ color: S.text, fontWeight: 800 }}>{rule.name}</span>
+                        <span className={`next-payment-badge ${isSoon ? "is-soon" : "is-normal"}`}>
+                          {daysUntil === 0 ? "Bugün" : daysUntil === 1 ? "Yarın" : rule.nextDate}
+                        </span>
+                      </div>
+                      <div style={{ color: S.muted, fontSize: 12 }}>
+                        {rule.frequency === "monthly" ? "Aylık" : "Haftalık"}
+                      </div>
                     </div>
+                    <div className="finance-number" style={{ color: S.rose, fontFamily: FONT_MONO, fontWeight: 800 }}>
+                      -{TRY(rule.amount)}
+                    </div>
+                    <button onClick={() => onCreateFromRule(rule)} style={{ ...btnGhost, padding: "7px 10px", fontSize: 12 }}>
+                      Kayda Düş
+                    </button>
                   </div>
-                  <div className="finance-number" style={{ color: S.rose, fontFamily: FONT_MONO, fontWeight: 800 }}>
-                    -{TRY(rule.amount)}
-                  </div>
-                  <button onClick={() => onCreateFromRule(rule)} style={{ ...btnGhost, padding: "7px 10px", fontSize: 12 }}>
-                    Kayda Düş
-                  </button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </Card>

@@ -34,7 +34,7 @@ export default function Categories({
   onClose,
 }) {
   const CatCard = ({ c }) => (
-    <Card style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <Card style={{ display: "flex", flexDirection: "column", gap: 10, opacity: c.isArchived ? 0.5 : 1 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <div
           style={{
@@ -48,38 +48,21 @@ export default function Categories({
             flexShrink: 0,
           }}
         >
-          <div
-            style={{
-              color: c.color,
-              fontWeight: 900,
-              fontSize: 15,
-            }}
-          >
+          <div style={{ color: c.color, fontWeight: 900, fontSize: 15 }}>
             {c.icon?.slice(0, 2) || "•"}
           </div>
         </div>
         <div style={{ flex: 1, overflow: "hidden" }}>
-          <div
-            style={{
-              fontWeight: 700,
-              fontSize: 14,
-              color: S.text,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {c.name}
-            {c.isArchived && (
-              <span style={{ color: S.muted, fontSize: 10, marginLeft: 6 }}>
-                Pasif
-              </span>
-            )}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {c.name}
+            </div>
+            <span className={`cat-type-badge cat-type-badge--${c.isIncome ? "income" : "expense"}`}>
+              {c.isIncome ? "Gelir" : "Gider"}
+            </span>
           </div>
           {!c.isIncome && c.budget > 0 ? (
-            <div
-              style={{ fontSize: 11, color: S.muted, fontFamily: FONT_MONO }}
-            >
+            <div style={{ fontSize: 11, color: S.muted, fontFamily: FONT_MONO }}>
               Limit: {TRY(c.budget)}
             </div>
           ) : (
@@ -111,53 +94,23 @@ export default function Categories({
   )
 
   return (
-    <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 10,
-        }}
-      >
+    <div className="page-root">
+      <div className="page-header">
         <div>
-          <span
-            style={{
-              fontSize: 14,
-              fontWeight: 600,
-              color: S.text,
-              fontFamily: FONT_BODY,
-            }}
-          >
-            {cats.filter((c) => !c.isArchived).length} Aktif Kategori
-          </span>
-          <span
-            style={{
-              fontSize: 12,
-              color: S.muted,
-              marginLeft: 8,
-              fontFamily: FONT_BODY,
-            }}
-          >
-            {cats.filter((c) => c.isIncome && !c.isArchived).length} gelir ·{" "}
+          <span className="page-kicker">Kategoriler</span>
+          <h1 className="page-title">Kategori Yönetimi</h1>
+          <p className="page-subtitle">
+            {cats.filter((c) => !c.isArchived).length} aktif —{" "}
+            {cats.filter((c) => c.isIncome && !c.isArchived).length} gelir,{" "}
             {cats.filter((c) => !c.isIncome && !c.isArchived).length} gider
-          </span>
+          </p>
         </div>
-        <button onClick={onAdd} style={btnPrimary}>
-          + Kategori Ekle
-        </button>
+        <div className="page-header-actions">
+          <button onClick={onAdd} style={btnPrimary}>+ Kategori Ekle</button>
+        </div>
       </div>
-      <div style={{ marginBottom: 10 }}>
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: 0,
-            textTransform: "uppercase",
-            color: S.green,
-            marginBottom: 8,
-          }}
-        >
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: S.green, marginBottom: 10 }}>
           Gelir Kategorileri
         </div>
         <div
@@ -176,16 +129,7 @@ export default function Categories({
         </div>
       </div>
       <div>
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: 0,
-            textTransform: "uppercase",
-            color: S.red,
-            marginBottom: 8,
-          }}
-        >
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: S.rose, marginBottom: 10 }}>
           Gider Kategorileri
         </div>
         <div

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react"
 
 import Card from "../ui/Card"
 import FieldLabel from "../ui/FieldLabel"
-import { S, FONT_BODY, FONT_MONO, inputStyle, btnGhost, btnPrimary, PALETTE } from "../../constants/theme"
+import { S, FONT_MONO, inputStyle, btnGhost, btnPrimary, PALETTE } from "../../constants/theme"
 import { today, TRY } from "../../utils/helpers"
 
 const emptyGoalForm = {
@@ -114,25 +114,30 @@ export default function Goals({
   }
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
+    <div className="page-root">
+      <div className="page-header">
+        <div>
+          <span className="page-kicker">Hedefler</span>
+          <h1 className="page-title">Birikim Hedefleri</h1>
+          <p className="page-subtitle">Finansal hedeflerinizi takip edin ve ilerlemenizi görün.</p>
+        </div>
+      </div>
+
+      <div className="stat-bar">
         {[
-          { label: "Birikim Hedefi", value: activeGoals.length, unit: "hedef", color: S.green },
-          { label: "Aşılan Bütçe", value: overCount, unit: "kategori", color: overCount > 0 ? S.red : S.green },
-          { label: "Toplam Hedef", value: TRY(totalTarget), color: S.sub, raw: true },
-          { label: "Kalan Tutar", value: TRY(totalRemaining), color: totalRemaining > 0 ? S.amber : S.green, raw: true },
+          { label: "Aktif Hedef", value: activeGoals.length, color: S.green },
+          { label: "Aşılan Bütçe", value: overCount, color: overCount > 0 ? S.red : S.green },
+          { label: "Toplam Hedef", value: TRY(totalTarget), color: S.sub },
+          { label: "Kalan Tutar", value: TRY(totalRemaining), color: totalRemaining > 0 ? S.amber : S.green },
         ].map((stat) => (
-          <Card key={stat.label}>
-            <FieldLabel>{stat.label}</FieldLabel>
-            <div style={{ fontFamily: stat.raw ? FONT_BODY : FONT_MONO, fontSize: stat.raw ? 16 : 22, fontWeight: 800, color: stat.color }}>
-              {stat.value}
-            </div>
-            {stat.unit && <div style={{ color: S.muted, fontSize: 11 }}>{stat.unit}</div>}
-          </Card>
+          <div key={stat.label} className="stat-bar-item stagger-item">
+            <span className="stat-bar-label">{stat.label}</span>
+            <span className="stat-bar-value" style={{ color: stat.color }}>{stat.value}</span>
+          </div>
         ))}
       </div>
 
-      <div className="goals-editor-grid" style={{ display: "grid", gridTemplateColumns: "0.9fr 1.1fr", gap: 10 }}>
+      <div className="goals-editor-grid" style={{ display: "grid", gridTemplateColumns: "0.9fr 1.1fr", gap: 10, marginTop: 0 }}>
         <Card>
           <FieldLabel>{editingGoalId ? "Hedefi Düzenle" : "Kişisel Hedef Oluştur"}</FieldLabel>
           <div style={{ display: "grid", gap: 10 }}>
@@ -141,12 +146,7 @@ export default function Goals({
                 <button
                   key={template.label}
                   onClick={() => applyTemplate(template)}
-                  style={{
-                    ...btnGhost,
-                    padding: "8px 10px",
-                    fontSize: 11,
-                    color: goalForm.name === template.name && template.name ? S.green : S.sub,
-                  }}
+                  className={`template-chip${goalForm.name === template.name && template.name ? " is-active" : ""}`}
                 >
                   {template.label}
                 </button>
@@ -224,7 +224,7 @@ export default function Goals({
             const daysLeft = goal.targetDate ? Math.max(Math.ceil((new Date(goal.targetDate) - new Date(today())) / 86400000), 0) : null
             const monthlyNeeded = daysLeft && remaining > 0 ? remaining / Math.max(Math.ceil(daysLeft / 30), 1) : 0
             return (
-              <Card key={goal.id}>
+              <Card key={goal.id} className={pct >= 100 ? "goal-card--complete" : ""}>
                 <div className="goal-card-head" style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
                   <div>
                     <div style={{ color: S.text, fontWeight: 800, fontSize: 16 }}>{goal.name}</div>
@@ -237,7 +237,7 @@ export default function Goals({
                   </div>
                 </div>
                 <div style={{ background: "rgba(187,202,191,0.14)", borderRadius: 20, height: 10, overflow: "hidden" }}>
-                  <div style={{ width: `${pct}%`, height: "100%", background: goal.color, borderRadius: 20 }} />
+                  <div className="goal-progress-fill" style={{ width: `${pct}%`, height: "100%", background: goal.color, borderRadius: 20 }} />
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 8, marginTop: 12 }}>
                   {[
@@ -273,7 +273,7 @@ export default function Goals({
                     <span style={{ color: over ? S.red : S.sub }}>{TRY(spent)} / {TRY(c.budget)}</span>
                   </div>
                   <div style={{ background: "rgba(187,202,191,0.14)", borderRadius: 20, height: 8, overflow: "hidden" }}>
-                    <div style={{ width: `${pct}%`, height: "100%", background: over ? S.red : c.color }} />
+                    <div className="goal-progress-fill" style={{ width: `${pct}%`, height: "100%", background: over ? S.red : c.color }} />
                   </div>
                 </div>
               )

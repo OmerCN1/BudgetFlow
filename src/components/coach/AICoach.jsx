@@ -88,7 +88,7 @@ export default function AICoach({
 
           <div className="ai-prompt-row" aria-label="Hızlı sorular">
             {starters.map((starter) => (
-              <button key={starter} type="button" onClick={() => ask(starter)} disabled={loading}>
+              <button key={starter} type="button" className="quick-prompt-btn" onClick={() => ask(starter)} disabled={loading}>
                 {starter}
               </button>
             ))}
@@ -183,7 +183,7 @@ function MessageBubble({ role, content }) {
       <div className="ai-message-avatar" aria-hidden="true">
         {isUser ? "S" : <Icon name="bot" />}
       </div>
-      <div className="ai-message-bubble">{content}</div>
+      <div className={`ai-message-bubble${isUser ? "" : " assistant-message"}`}>{content}</div>
     </div>
   )
 }

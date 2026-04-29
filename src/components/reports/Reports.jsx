@@ -12,7 +12,6 @@ import {
 } from "recharts"
 
 import Card from "../ui/Card"
-import FieldLabel from "../ui/FieldLabel"
 import { S, FONT_BODY, FONT_MONO } from "../../constants/theme"
 import { TRY } from "../../utils/helpers"
 import { categoryTotals, monthLabel, monthKey, totalsFor } from "../../utils/finance"
@@ -39,26 +38,35 @@ export default function Reports({ txs, cats }) {
   const hasTransactions = txs.length > 0
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10 }}>
+    <div className="page-root">
+      <div className="page-header">
+        <div>
+          <span className="page-kicker">Analiz</span>
+          <h1 className="page-title">Raporlar</h1>
+          <p className="page-subtitle">Harcama ve gelir trendlerinize genel bakış.</p>
+        </div>
+      </div>
+
+      <div className="stat-bar">
         {[
           { label: "Bu Ay Net", value: TRY(totals.net), color: totals.net >= 0 ? S.green : S.red },
           { label: "Bu Ay Gider", value: TRY(totals.expense), color: S.red },
           { label: "6 Ay Ort. Gider", value: TRY(avgExpense), color: S.amber },
           { label: "Aktif Kategori", value: cats.filter((cat) => !cat.isArchived).length, color: S.sub },
         ].map((stat) => (
-          <Card key={stat.label}>
-            <FieldLabel>{stat.label}</FieldLabel>
-            <div style={{ fontFamily: FONT_MONO, fontWeight: 800, fontSize: 18, color: stat.color }}>
-              {stat.value}
-            </div>
-          </Card>
+          <div key={stat.label} className="stat-bar-item stagger-item">
+            <span className="stat-bar-label">{stat.label}</span>
+            <span className="stat-bar-value" style={{ color: stat.color }}>{stat.value}</span>
+          </div>
         ))}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1.35fr 0.65fr", gap: 10 }}>
         <Card>
-          <FieldLabel>6 Aylık Gelir, Gider ve Net</FieldLabel>
+          <div className="chart-card-header">
+            <p className="chart-card-title">6 Aylık Gelir, Gider ve Net</p>
+            <span className="chart-card-meta">Son 6 ay</span>
+          </div>
           {hasTransactions ? (
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={monthlyData}>
@@ -81,7 +89,10 @@ export default function Reports({ txs, cats }) {
         </Card>
 
         <Card>
-          <FieldLabel>Bu Ay Kategori Dağılımı</FieldLabel>
+          <div className="chart-card-header">
+            <p className="chart-card-title">Bu Ay Kategori Dağılımı</p>
+            <span className="chart-card-meta">Gider dağılımı</span>
+          </div>
           {expenseCats.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
@@ -100,11 +111,17 @@ export default function Reports({ txs, cats }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <Card>
-          <FieldLabel>En Çok Harcananlar</FieldLabel>
+          <div className="chart-card-header">
+            <p className="chart-card-title">En Çok Harcananlar</p>
+            <span className="chart-card-meta">Bu ay</span>
+          </div>
           <MiniList items={expenseCats.slice(0, 8)} />
         </Card>
         <Card>
-          <FieldLabel>Gelir Kaynakları</FieldLabel>
+          <div className="chart-card-header">
+            <p className="chart-card-title">Gelir Kaynakları</p>
+            <span className="chart-card-meta">Bu ay</span>
+          </div>
           <MiniList items={incomeCats.slice(0, 8)} />
         </Card>
       </div>

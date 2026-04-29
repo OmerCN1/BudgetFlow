@@ -79,31 +79,40 @@ export default function RecurringRules({ cats, rules, onSaveRule, onCreateFromRu
           {rules.filter((rule) => rule.isActive).length === 0 && (
             <div style={{ color: S.muted, fontSize: 13 }}>Henüz tekrarlı işlem yok.</div>
           )}
-          {rules.filter((rule) => rule.isActive).map((rule) => (
-            <div
-              key={rule.id}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr auto auto",
-                gap: 10,
-                alignItems: "center",
-                border: `1px solid ${S.border}`,
-                borderRadius: 8,
-                padding: 10,
-              }}
-            >
-              <div>
-                <div style={{ color: S.text, fontWeight: 800, fontSize: 13 }}>{rule.name}</div>
-                <div style={{ color: S.muted, fontSize: 11 }}>{rule.frequency === "monthly" ? "Aylık" : "Haftalık"} · {rule.nextDate}</div>
+          {rules.filter((rule) => rule.isActive).map((rule) => {
+            const daysUntil = rule.nextDate ? Math.ceil((new Date(rule.nextDate) - new Date()) / 86400000) : null
+            const isSoon = daysUntil !== null && daysUntil <= 7
+            return (
+              <div
+                key={rule.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr auto auto",
+                  gap: 10,
+                  alignItems: "center",
+                  border: `1px solid ${S.border}`,
+                  borderRadius: 8,
+                  padding: 10,
+                }}
+              >
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 2 }}>
+                    <span style={{ color: S.text, fontWeight: 800, fontSize: 13 }}>{rule.name}</span>
+                    <span className={`next-payment-badge ${isSoon ? "is-soon" : "is-normal"}`}>
+                      {daysUntil === 0 ? "Bugün" : daysUntil === 1 ? "Yarın" : rule.nextDate}
+                    </span>
+                  </div>
+                  <div style={{ color: S.muted, fontSize: 11 }}>{rule.frequency === "monthly" ? "Aylık" : "Haftalık"}</div>
+                </div>
+                <div style={{ color: rule.type === "income" ? S.green : S.red, fontFamily: FONT_MONO, fontWeight: 800 }}>
+                  {rule.type === "income" ? "+" : "-"}{TRY(rule.amount)}
+                </div>
+                <button onClick={() => onCreateFromRule(rule)} style={{ ...btnGhost, padding: "6px 10px", fontSize: 12 }}>
+                  Bu ay oluştur
+                </button>
               </div>
-              <div style={{ color: rule.type === "income" ? S.green : S.red, fontFamily: FONT_MONO, fontWeight: 800 }}>
-                {rule.type === "income" ? "+" : "-"}{TRY(rule.amount)}
-              </div>
-              <button onClick={() => onCreateFromRule(rule)} style={{ ...btnGhost, padding: "6px 10px", fontSize: 12 }}>
-                Bu ay oluştur
-              </button>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </Card>
     </div>

@@ -14,15 +14,15 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
     .toUpperCase()
 
   const NAV = [
-    { id: "dashboard", label: "Özet", icon: "dashboard" },
-    { id: "transactions", label: "İşlemler", icon: "transactions" },
-    { id: "receipts", label: "Belgeler", icon: "receipts" },
-    { id: "calendar", label: "Takvim", icon: "calendar" },
-    { id: "subscriptions", label: "Abonelikler", icon: "subscriptions" },
-    { id: "reports", label: "Raporlar", icon: "reports" },
-    { id: "goals", label: "Hedefler", icon: "goals" },
-    { id: "coach", label: "AI Koç", icon: "coach" },
-    { id: "categories", label: "Kategoriler", icon: "categories" },
+    { id: "dashboard",     label: "Özet",        icon: "dashboard",     group: "Genel" },
+    { id: "transactions",  label: "İşlemler",    icon: "transactions",  group: "Genel" },
+    { id: "receipts",      label: "Belgeler",    icon: "receipts",      group: "Analiz" },
+    { id: "reports",       label: "Raporlar",    icon: "reports",       group: "Analiz" },
+    { id: "coach",         label: "AI Koç",      icon: "coach",         group: "Analiz" },
+    { id: "calendar",      label: "Takvim",      icon: "calendar",      group: "Yönetim" },
+    { id: "goals",         label: "Hedefler",    icon: "goals",         group: "Yönetim" },
+    { id: "subscriptions", label: "Abonelikler", icon: "subscriptions", group: "Yönetim" },
+    { id: "categories",    label: "Kategoriler", icon: "categories",    group: "Yönetim" },
   ]
 
   const navigate = (nextView) => {
@@ -111,57 +111,62 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
       <div
         className="glass-card sidebar-balance-card"
         style={{
-          marginTop: 28,
+          marginTop: 24,
           display: "flex",
           alignItems: "center",
           gap: 10,
+          borderLeft: `3px solid ${balance >= 0 ? S.green : S.red}`,
+          borderRadius: "0 8px 8px 0",
         }}
       >
         <span
           style={{
-            width: 9,
-            height: 9,
+            width: 8,
+            height: 8,
             borderRadius: "50%",
             background: balance >= 0 ? S.green : S.red,
-            boxShadow: `0 0 18px ${balance >= 0 ? S.green : S.red}`,
+            boxShadow: `0 0 14px ${balance >= 0 ? S.green : S.red}`,
             flexShrink: 0,
           }}
         />
         <div className="sidebar-balance-copy" style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: S.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>
+            Net Bakiye
+          </div>
           <div
             className="finance-number sidebar-balance-value"
-            style={{
-              fontWeight: 800,
-              color: balance >= 0 ? S.green : S.red,
-              whiteSpace: "nowrap",
-            }}
+            style={{ fontWeight: 800, color: balance >= 0 ? S.green : S.red, whiteSpace: "nowrap" }}
           >
             {balance >= 0 ? "+" : ""}
             {TRY(balance)}
           </div>
-          <div style={{ fontSize: 11, color: S.muted, marginTop: 3 }}>Net bakiye</div>
         </div>
       </div>
 
-      <nav className="luminous-nav">
-        {NAV.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => navigate(t.id)}
-            className={`luminous-nav-button${view === t.id ? " is-active" : ""}`}
-          >
-            <span
-              aria-hidden="true"
-              className="luminous-nav-icon"
-              style={{
-                color: view === t.id ? S.green : S.muted,
-              }}
-            >
-              <NavIcon name={t.icon} />
-            </span>
-            {t.label}
-          </button>
-        ))}
+      <nav className="luminous-nav" style={{ marginTop: "1.5rem" }}>
+        {NAV.map((t, i) => {
+          const showGroupLabel = i === 0 || NAV[i - 1].group !== t.group
+          return (
+            <div key={t.id}>
+              {showGroupLabel && (
+                <span className="nav-group-label">{t.group}</span>
+              )}
+              <button
+                onClick={() => navigate(t.id)}
+                className={`luminous-nav-button${view === t.id ? " is-active" : ""}`}
+              >
+                <span
+                  aria-hidden="true"
+                  className="luminous-nav-icon"
+                  style={{ color: view === t.id ? S.green : S.muted }}
+                >
+                  <NavIcon name={t.icon} />
+                </span>
+                {t.label}
+              </button>
+            </div>
+          )
+        })}
       </nav>
 
       <div className="sidebar-footer">

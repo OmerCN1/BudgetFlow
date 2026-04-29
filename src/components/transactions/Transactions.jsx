@@ -109,29 +109,27 @@ export default function Transactions({
   }
 
   return (
-    <div>
-      <Card style={{ marginBottom: 10 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))",
-            gap: 10,
-          }}
-        >
-          {[
-            {
-              label: "Arama",
-              el: (
-                <input
-                  value={filters.q || ""}
-                  onChange={(e) =>
-                    setFilters((p) => ({ ...p, q: e.target.value }))
-                  }
-                  placeholder="Açıklama, kategori, etiket..."
-                  style={inputStyle}
-                />
-              ),
-            },
+    <div className="page-root">
+      <div className="page-header">
+        <div>
+          <span className="page-kicker">İşlemler</span>
+          <h1 className="page-title">İşlem Merkezi</h1>
+        </div>
+      </div>
+
+      <div className="tx-filter-bar">
+        {[
+          {
+            label: "Arama",
+            el: (
+              <input
+                value={filters.q || ""}
+                onChange={(e) => setFilters((p) => ({ ...p, q: e.target.value }))}
+                placeholder="Açıklama, kategori, etiket..."
+                style={inputStyle}
+              />
+            ),
+          },
             {
               label: "Tür",
               el: (
@@ -212,47 +210,26 @@ export default function Transactions({
               ),
             },
           ].map(({ label, el }, i) => (
-            <div key={i}>
-              <FieldLabel>{label}</FieldLabel>
+            <div key={i} className="tx-filter-field">
+              <span className="tx-filter-label">{label}</span>
               {el}
             </div>
           ))}
-        </div>
-
         {hasFilters && (
           <button
             onClick={clearFilters}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: S.muted,
-              cursor: "pointer",
-              fontSize: 11,
-              fontFamily: FONT_BODY,
-              marginTop: 8,
-            }}
+            style={{ background: "transparent", border: "none", color: S.muted, cursor: "pointer", fontSize: 11, fontFamily: FONT_BODY, alignSelf: "flex-end", padding: "0 4px", marginBottom: 2 }}
           >
-            ✕ Filtreleri temizle
+            ✕ Temizle
           </button>
         )}
-      </Card>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 10,
-        }}
-      >
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
         <span style={{ fontSize: 12, color: S.muted, fontFamily: FONT_BODY }}>
           {filteredTxs.length} işlem ·{" "}
-          <span style={{ color: S.green }}>
-            {TRY(sum(filteredTxs.filter((t) => t.type === "income")))} gelir
-          </span>{" "}
-          ·{" "}
-          <span style={{ color: S.red }}>
-            {TRY(sum(filteredTxs.filter((t) => t.type === "expense")))} gider
-          </span>
+          <span style={{ color: S.green }}>{TRY(sum(filteredTxs.filter((t) => t.type === "income")))} gelir</span>
+          {" · "}
+          <span style={{ color: S.red }}>{TRY(sum(filteredTxs.filter((t) => t.type === "expense")))} gider</span>
         </span>
         <div style={{ display: "flex", gap: 8 }}>
           <input
@@ -268,20 +245,14 @@ export default function Transactions({
             }}
             style={{ display: "none" }}
           />
-          <button onClick={() => fileInputRef.current?.click()} style={btnGhost}>
-            CSV İçe Aktar
-          </button>
-          <button onClick={exportCSV} style={btnGhost}>
-            CSV İndir
-          </button>
-          <button onClick={onAdd} style={btnPrimary}>
-            + İşlem Ekle
-          </button>
+          <button onClick={() => fileInputRef.current?.click()} style={btnGhost}>CSV İçe Aktar</button>
+          <button onClick={exportCSV} style={btnGhost}>CSV İndir</button>
+          <button onClick={onAdd} style={btnPrimary}>+ İşlem Ekle</button>
         </div>
       </div>
 
       {selectedIds.length > 0 && (
-        <Card style={{ marginBottom: 10, padding: 14 }}>
+        <Card className="bulk-action-bar" style={{ padding: 14 }}>
           <div style={{ display: "grid", gridTemplateColumns: "auto 140px 1fr 140px auto auto", gap: 8, alignItems: "center" }}>
             <strong style={{ color: S.green, fontSize: 13 }}>{selectedIds.length} seçili</strong>
             <select value={bulkPatch.type} onChange={(e) => setBulkPatch((p) => ({ ...p, type: e.target.value, cat: "" }))} style={inputStyle}>
@@ -348,10 +319,8 @@ export default function Transactions({
               return (
                 <tr
                   key={t.id}
-                  style={{
-                    borderBottom: `1px solid ${S.border}25`,
-                    background: idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.025)",
-                  }}
+                  className="tx-list-row"
+                  style={{ borderBottom: `1px solid ${S.border}25` }}
                 >
                   <td style={{ padding: "11px 14px" }}>
                     <input type="checkbox" checked={selectedSet.has(t.id)} onChange={() => toggleSelect(t.id)} />
