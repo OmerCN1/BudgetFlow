@@ -16,13 +16,17 @@ import Subscriptions from "./components/subscriptions/Subscriptions"
 import AuthScreen from "./components/auth/AuthScreen"
 import LandingPage from "./components/auth/LandingPage"
 import Account from "./components/account/Account"
+import DebtTracker from "./components/debts/DebtTracker"
+import CurrencyRates from "./components/currency/CurrencyRates"
 import Card from "./components/ui/Card"
 
 import { useAuth } from "./hooks/useAuth"
 import {
+  addDebtPayment,
   addGoalContribution,
   createTransactionFromRule,
   deleteCategory,
+  deleteDebt,
   deleteGoal,
   deleteReceiptFile,
   deleteTransaction,
@@ -31,23 +35,28 @@ import {
   getReceiptUrl,
   linkReceiptToTransaction,
   loadBudgetData,
+  loadDebts,
   saveCategory,
+  saveDebt,
   saveGoal,
   saveReceiptFile,
   saveRecurringRule,
   saveTransaction,
   saveTransactions,
   sendCoachMessage,
+  settleDebt,
   updateProfile,
   updateTransactions,
 } from "./services/budgetService"
 import { PALETTE, FONT_BODY, S, btnPrimary } from "./constants/theme"
 import { today, sum } from "./utils/helpers"
 import { extractReceiptFieldsFromText, suggestCategory } from "./utils/categorySuggestions"
+import { useTheme } from "./hooks/useTheme"
 
 export default function App() {
   const { user, loading: authLoading, isConfigured } = useAuth()
   const userId = user?.id || null
+  const { theme, toggleTheme } = useTheme()
 
   const [txs, setTxs] = useState([])
   const [cats, setCats] = useState([])
@@ -59,6 +68,8 @@ export default function App() {
   const [aiMessages, setAiMessages] = useState([])
   const [currentAiConversationId, setCurrentAiConversationId] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [debts, setDebts] = useState([])
+  const [debtPayments, setDebtPayments] = useState([])
   const [view, setView] = useState("dashboard")
   const [dataLoading, setDataLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
@@ -81,6 +92,8 @@ export default function App() {
     paymentMethod: "Kart",
     tags: "",
     receiptId: "",
+    originalCurrency: "TRY",
+    originalAmount: null,
   })
 
   const [showCatModal, setShowCatModal] = useState(false)
@@ -132,6 +145,12 @@ export default function App() {
         setReceipts(data.receipts || [])
         setAiInsights(data.aiInsights)
         setHasLoadedData(true)
+        loadDebts(user.id)
+          .then(({ debts: d, debtPayments: dp }) => {
+            setDebts(d)
+            setDebtPayments(dp)
+          })
+          .catch(() => {})
       })
       .catch((err) => {
         if (refreshSeqRef.current !== requestSeq) return
@@ -170,6 +189,8 @@ export default function App() {
       setAiMessages([])
       setCurrentAiConversationId(null)
       setProfile(null)
+      setDebts([])
+      setDebtPayments([])
       setHasLoadedData(false)
       setDataLoading(false)
       setView("dashboard")
@@ -226,6 +247,8 @@ export default function App() {
       paymentMethod: "Kart",
       tags: "",
       receiptId: "",
+      originalCurrency: "TRY",
+      originalAmount: null,
     })
     setEditTx(null)
     setShowTxModal(true)
@@ -241,6 +264,8 @@ export default function App() {
       paymentMethod: t.paymentMethod || "Kart",
       tags: (t.tags || []).join(", "),
       receiptId: receipts.find((receipt) => receipt.transactionId === t.id)?.id || "",
+      originalCurrency: t.originalCurrency || "TRY",
+      originalAmount: t.originalAmount != null ? String(t.originalAmount) : null,
     })
     setEditTx(t)
     setShowTxModal(true)
@@ -262,6 +287,10 @@ export default function App() {
       desc: txForm.desc,
       paymentMethod: txForm.paymentMethod || "Kart",
       tags: (txForm.tags || "").split(",").map((tag) => tag.trim()).filter(Boolean),
+      originalCurrency: txForm.originalCurrency || "TRY",
+      originalAmount: txForm.originalCurrency && txForm.originalCurrency !== "TRY" && txForm.originalAmount
+        ? parseFloat(txForm.originalAmount) || null
+        : null,
     }
 
     setActionLoading(true)
@@ -547,6 +576,61 @@ export default function App() {
     }
   }
 
+  const handleSaveDebt = async (debt, editId) => {
+    setActionLoading(true)
+    try {
+      const saved = await saveDebt(user.id, debt, editId)
+      setDebts((prev) => editId ? prev.map((d) => d.id === editId ? saved : d) : [saved, ...prev])
+      showNotice(editId ? "Borç güncellendi." : "Borç eklendi.")
+    } catch (err) {
+      showError(err.message || "Borç kaydedilemedi.")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleDeleteDebt = async (id) => {
+    const ok = window.confirm("Bu borç kaydı silinsin mi?")
+    if (!ok) return
+    setActionLoading(true)
+    try {
+      await deleteDebt(user.id, id)
+      setDebts((prev) => prev.filter((d) => d.id !== id))
+      setDebtPayments((prev) => prev.filter((p) => p.debtId !== id))
+      showNotice("Borç silindi.")
+    } catch (err) {
+      showError(err.message || "Borç silinemedi.")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleSettleDebt = async (id) => {
+    setActionLoading(true)
+    try {
+      const saved = await settleDebt(user.id, id)
+      setDebts((prev) => prev.map((d) => d.id === id ? saved : d))
+      showNotice("Borç kapandı olarak işaretlendi.")
+    } catch (err) {
+      showError(err.message || "Borç güncellenemedi.")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleAddDebtPayment = async (payment) => {
+    setActionLoading(true)
+    try {
+      const saved = await addDebtPayment(user.id, payment)
+      setDebtPayments((prev) => [saved, ...prev])
+      showNotice("Ödeme eklendi.")
+    } catch (err) {
+      showError(err.message || "Ödeme eklenemedi.")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   const handleSaveRule = async (rule, editId) => {
     setActionLoading(true)
     try {
@@ -757,6 +841,8 @@ export default function App() {
         onAddTx={openAddTx}
         user={user}
         disabled={actionLoading || activeCats.length === 0}
+        theme={theme}
+        toggleTheme={toggleTheme}
       />
 
       <main className="app-main">
@@ -873,6 +959,17 @@ export default function App() {
                   onNewChat={handleNewAiChat}
                 />
               )}
+              {view === "debts" && (
+                <DebtTracker
+                  debts={debts}
+                  debtPayments={debtPayments}
+                  onSaveDebt={handleSaveDebt}
+                  onDeleteDebt={handleDeleteDebt}
+                  onSettleDebt={handleSettleDebt}
+                  onAddPayment={handleAddDebtPayment}
+                />
+              )}
+              {view === "currency" && <CurrencyRates />}
               {view === "account" && (
                 <Account
                   user={user}

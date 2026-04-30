@@ -50,7 +50,9 @@ alter table public.transactions
   add column if not exists payment_method text not null default 'Kart',
   add column if not exists tags text[] not null default '{}',
   add column if not exists source text not null default 'manual',
-  add column if not exists recurring_rule_id uuid;
+  add column if not exists recurring_rule_id uuid,
+  add column if not exists original_currency text not null default 'TRY',
+  add column if not exists original_amount numeric(12, 4);
 
 create table if not exists public.goals (
   id uuid primary key default gen_random_uuid(),
@@ -237,6 +239,52 @@ with check ((select auth.uid()) = user_id);
 drop policy if exists "Users can manage their own receipts" on public.receipts;
 create policy "Users can manage their own receipts"
 on public.receipts
+for all
+to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+
+create table if not exists public.debts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  person_name text not null,
+  amount numeric(12, 2) not null check (amount >= 0),
+  direction text not null check (direction in ('owed_to_me', 'i_owe')),
+  description text,
+  due_date date,
+  is_settled boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.debt_payments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  debt_id uuid not null references public.debts(id) on delete cascade,
+  amount numeric(12, 2) not null check (amount >= 0),
+  payment_date date not null,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists debts_user_id_idx on public.debts(user_id);
+create index if not exists debt_payments_user_id_idx on public.debt_payments(user_id);
+create index if not exists debt_payments_debt_id_idx on public.debt_payments(debt_id);
+
+alter table public.debts enable row level security;
+alter table public.debt_payments enable row level security;
+
+drop policy if exists "Users can manage their own debts" on public.debts;
+create policy "Users can manage their own debts"
+on public.debts
+for all
+to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can manage their own debt payments" on public.debt_payments;
+create policy "Users can manage their own debt payments"
+on public.debt_payments
 for all
 to authenticated
 using ((select auth.uid()) = user_id)

@@ -31,6 +31,8 @@ const toTransaction = (row) => ({
   tags: Array.isArray(row.tags) ? row.tags : [],
   source: row.source || "manual",
   recurringRuleId: row.recurring_rule_id || null,
+  originalCurrency: row.original_currency || "TRY",
+  originalAmount: row.original_amount != null ? Number(row.original_amount) : null,
 })
 
 const fromCategory = (category, userId) => ({
@@ -54,6 +56,8 @@ const fromTransaction = (transaction, userId) => ({
   tags: transaction.tags || [],
   source: transaction.source || "manual",
   recurring_rule_id: transaction.recurringRuleId || null,
+  original_currency: transaction.originalCurrency || "TRY",
+  original_amount: transaction.originalAmount ?? null,
 })
 
 const fromLegacyTransaction = (transaction, userId) => ({
@@ -1314,6 +1318,112 @@ function sanitizeStorageName(value) {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 90) || "receipt"
+}
+
+const toDebt = (row) => ({
+  id: row.id,
+  personName: row.person_name,
+  amount: Number(row.amount || 0),
+  direction: row.direction,
+  description: row.description || "",
+  dueDate: row.due_date || "",
+  isSettled: Boolean(row.is_settled),
+  createdAt: row.created_at,
+})
+
+const toDebtPayment = (row) => ({
+  id: row.id,
+  debtId: row.debt_id,
+  amount: Number(row.amount || 0),
+  paymentDate: row.payment_date,
+  note: row.note || "",
+  createdAt: row.created_at,
+})
+
+const fromDebt = (debt, userId) => ({
+  user_id: userId,
+  person_name: debt.personName,
+  amount: debt.amount || 0,
+  direction: debt.direction,
+  description: debt.description || null,
+  due_date: debt.dueDate || null,
+  is_settled: Boolean(debt.isSettled),
+})
+
+export async function loadDebts(userId) {
+  const [debtsResult, paymentsResult] = await Promise.all([
+    supabase
+      .from("debts")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("debt_payments")
+      .select("*")
+      .eq("user_id", userId)
+      .order("payment_date", { ascending: false }),
+  ])
+
+  if (debtsResult.error) {
+    if (isSchemaMissing(debtsResult.error)) return { debts: [], debtPayments: [] }
+    throw debtsResult.error
+  }
+
+  return {
+    debts: (debtsResult.data || []).map(toDebt),
+    debtPayments: optionalRows(paymentsResult).map(toDebtPayment),
+  }
+}
+
+export async function saveDebt(userId, debt, editId) {
+  const payload = fromDebt(debt, userId)
+  const query = editId
+    ? supabase.from("debts").update(payload).eq("id", editId).eq("user_id", userId)
+    : supabase.from("debts").insert(payload)
+
+  const { data, error } = await query.select().single()
+  if (error) throw error
+  return toDebt(data)
+}
+
+export async function settleDebt(userId, id) {
+  const { data, error } = await supabase
+    .from("debts")
+    .update({ is_settled: true })
+    .eq("id", id)
+    .eq("user_id", userId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return toDebt(data)
+}
+
+export async function deleteDebt(userId, id) {
+  const { error } = await supabase
+    .from("debts")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId)
+
+  if (error) throw error
+}
+
+export async function addDebtPayment(userId, payment) {
+  const { data, error } = await supabase
+    .from("debt_payments")
+    .insert({
+      user_id: userId,
+      debt_id: payment.debtId,
+      amount: payment.amount,
+      payment_date: payment.paymentDate,
+      note: payment.note || null,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return toDebtPayment(data)
 }
 
 function buildLocalCoachResponse(message, summary) {

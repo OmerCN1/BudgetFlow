@@ -6,6 +6,7 @@ import Modal from "../ui/Modal"
 import { S, FONT_BODY, FONT_MONO, inputStyle, btnGhost, btnDanger, btnPrimary, PALETTE } from "../../constants/theme"
 import { TRY, sum } from "../../utils/helpers"
 import { suggestCategory } from "../../utils/categorySuggestions"
+import { fetchRates, toTRY, SUPPORTED_CURRENCIES, CURRENCY_SYMBOLS, formatForeign } from "../../services/currencyService"
 
 export default function Transactions({
   txs,
@@ -33,6 +34,11 @@ export default function Transactions({
   const [selectedIds, setSelectedIds] = useState([])
   const [sort, setSort] = useState({ key: "date", dir: "desc" })
   const [bulkPatch, setBulkPatch] = useState({ type: "", cat: "", paymentMethod: "" })
+  const [fxRates, setFxRates] = useState(null)
+
+  useEffect(() => {
+    fetchRates().then(setFxRates).catch(() => {})
+  }, [])
   const availCats = useMemo(
     () =>
       txForm.type === "income"
@@ -224,7 +230,7 @@ export default function Transactions({
           </button>
         )}
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+      <div className="tx-toolbar-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, color: S.muted, fontFamily: FONT_BODY }}>
           {filteredTxs.length} işlem ·{" "}
           <span style={{ color: S.green }}>{TRY(sum(filteredTxs.filter((t) => t.type === "income")))} gelir</span>
@@ -417,6 +423,11 @@ export default function Transactions({
                   >
                     {t.type === "income" ? "+" : "-"}
                     {TRY(t.amount)}
+                    {t.originalCurrency && t.originalCurrency !== "TRY" && t.originalAmount != null && (
+                      <div style={{ fontSize: 10, color: S.muted, fontWeight: 400 }}>
+                        {formatForeign(t.originalAmount, t.originalCurrency)}
+                      </div>
+                    )}
                   </td>
                   <td style={{ padding: "11px 14px" }}>
                     <div
@@ -503,17 +514,49 @@ export default function Transactions({
             </div>
           </div>
           <div>
-            <FieldLabel>Tutar (₺)</FieldLabel>
-            <input
-              type="number"
-              min="0"
-              placeholder="0"
-              value={txForm.amount}
-              onChange={(e) =>
-                setTxForm((p) => ({ ...p, amount: e.target.value }))
-              }
-              style={inputStyle}
-            />
+            <FieldLabel>Tutar</FieldLabel>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 8 }}>
+              <input
+                type="number"
+                min="0"
+                placeholder="0"
+                value={txForm.originalAmount ?? txForm.amount}
+                onChange={(e) => {
+                  const raw = e.target.value
+                  const cur = txForm.originalCurrency || "TRY"
+                  if (cur === "TRY") {
+                    setTxForm((p) => ({ ...p, amount: raw, originalAmount: null, originalCurrency: "TRY" }))
+                  } else {
+                    const tryVal = fxRates ? String(Math.round(toTRY(parseFloat(raw) || 0, cur, fxRates))) : ""
+                    setTxForm((p) => ({ ...p, originalAmount: raw, amount: tryVal, originalCurrency: cur }))
+                  }
+                }}
+                style={inputStyle}
+              />
+              <select
+                value={txForm.originalCurrency || "TRY"}
+                onChange={(e) => {
+                  const cur = e.target.value
+                  const orig = parseFloat(txForm.originalAmount ?? txForm.amount) || 0
+                  if (cur === "TRY") {
+                    setTxForm((p) => ({ ...p, originalCurrency: "TRY", originalAmount: null, amount: String(orig) }))
+                  } else {
+                    const tryVal = fxRates ? String(Math.round(toTRY(orig, cur, fxRates))) : ""
+                    setTxForm((p) => ({ ...p, originalCurrency: cur, originalAmount: String(orig), amount: tryVal }))
+                  }
+                }}
+                style={inputStyle}
+              >
+                {SUPPORTED_CURRENCIES.map((c) => (
+                  <option key={c} value={c}>{CURRENCY_SYMBOLS[c]} {c}</option>
+                ))}
+              </select>
+            </div>
+            {txForm.originalCurrency && txForm.originalCurrency !== "TRY" && txForm.amount && (
+              <div style={{ fontSize: 11, color: S.muted, marginTop: 4 }}>
+                ≈ {TRY(parseFloat(txForm.amount) || 0)} olarak kaydedilecek
+              </div>
+            )}
           </div>
           <div>
             <FieldLabel>Kategori</FieldLabel>
@@ -566,6 +609,7 @@ export default function Transactions({
             </select>
           </div>
           <div
+            className="modal-date-row"
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}
           >
             <div>

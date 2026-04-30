@@ -45,7 +45,7 @@ export default function RecurringRules({ cats, rules, onSaveRule, onCreateFromRu
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "0.9fr 1.1fr", gap: 10, marginTop: 12 }}>
+    <div className="recurring-editor-grid" style={{ display: "grid", gridTemplateColumns: "0.9fr 1.1fr", gap: 10, marginTop: 12 }}>
       <Card>
         <FieldLabel>Tekrarlı İşlem Şablonu</FieldLabel>
         <div style={{ display: "grid", gap: 8 }}>

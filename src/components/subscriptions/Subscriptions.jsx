@@ -67,7 +67,7 @@ export default function Subscriptions({ cats, rules, onSaveRule, onCreateFromRul
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "0.8fr 1.2fr", gap: 12 }}>
+      <div className="subscriptions-editor-grid" style={{ display: "grid", gridTemplateColumns: "0.8fr 1.2fr", gap: 12 }}>
         <Card>
           <FieldLabel>Yeni Abonelik</FieldLabel>
           <div style={{ display: "grid", gap: 10 }}>

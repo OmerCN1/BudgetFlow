@@ -23,6 +23,35 @@ export const S = {
   tint: "#4edea3",
 }
 
+export const S_LIGHT = {
+  bg: "#f0f4f1",
+  surface: "#e6ede8",
+  surfaceDim: "#dce5de",
+  surfaceBright: "#ffffff",
+  containerLowest: "#f8faf8",
+  containerLow: "#eef3ef",
+  container: "#e6ede8",
+  containerHigh: "#dce5de",
+  containerHighest: "#cfd9d1",
+  card: "rgba(255,255,255,0.72)",
+  card2: "rgba(16,185,129,0.08)",
+  border: "rgba(60,100,75,0.14)",
+  borderStrong: "rgba(60,100,75,0.28)",
+  text: "#0d1f15",
+  sub: "#2d4a38",
+  muted: "#5a7a65",
+  green: "#0d9e6e",
+  cyan: "#0891b2",
+  red: "#dc2626",
+  rose: "#e11d48",
+  amber: "#d97706",
+  tint: "#0d9e6e",
+}
+
+export function getS(theme) {
+  return theme === "light" ? S_LIGHT : S
+}
+
 export const PALETTE = [
   "#4edea3",
   "#4cd7f6",

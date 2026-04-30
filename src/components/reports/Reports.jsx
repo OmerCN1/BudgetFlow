@@ -61,7 +61,7 @@ export default function Reports({ txs, cats }) {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.35fr 0.65fr", gap: 10 }}>
+      <div className="reports-main-grid" style={{ display: "grid", gridTemplateColumns: "1.35fr 0.65fr", gap: 10 }}>
         <Card>
           <div className="chart-card-header">
             <p className="chart-card-title">6 Aylık Gelir, Gider ve Net</p>
@@ -109,7 +109,7 @@ export default function Reports({ txs, cats }) {
         </Card>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <div className="reports-main-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <Card>
           <div className="chart-card-header">
             <p className="chart-card-title">En Çok Harcananlar</p>

@@ -2,7 +2,7 @@ import { useState } from "react"
 import { S, FONT_BODY, btnPrimary } from "../../constants/theme"
 import { TRY } from "../../utils/helpers"
 
-export default function Header({ view, setView, balance, notificationCount = 0, onAddTx, user, disabled }) {
+export default function Header({ view, setView, balance, notificationCount = 0, onAddTx, user, disabled, theme, toggleTheme }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const displayName = user?.user_metadata?.display_name || user?.user_metadata?.full_name || "Hesabım"
   const initials = displayName
@@ -21,8 +21,10 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
     { id: "coach",         label: "AI Koç",      icon: "coach",         group: "Analiz" },
     { id: "calendar",      label: "Takvim",      icon: "calendar",      group: "Yönetim" },
     { id: "goals",         label: "Hedefler",    icon: "goals",         group: "Yönetim" },
+    { id: "debts",         label: "Borçlar",     icon: "debts",         group: "Yönetim" },
     { id: "subscriptions", label: "Abonelikler", icon: "subscriptions", group: "Yönetim" },
     { id: "categories",    label: "Kategoriler", icon: "categories",    group: "Yönetim" },
+    { id: "currency",      label: "Döviz",       icon: "currency",      group: "Yönetim" },
   ]
 
   const navigate = (nextView) => {
@@ -181,6 +183,15 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
             </button>
           )}
           <button
+            className="theme-toggle-btn"
+            type="button"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Aydınlık temaya geç" : "Karanlık temaya geç"}
+            title={theme === "dark" ? "Aydınlık mod" : "Karanlık mod"}
+          >
+            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+          </button>
+          <button
             className={`sidebar-notification-button${view === "notifications" ? " is-active" : ""}`}
             onClick={() => navigate("notifications")}
             type="button"
@@ -291,11 +302,43 @@ function NavIcon({ name }) {
         <path d="M8 4.5v4M15.5 10v4M10.5 15.5v4" />
       </>
     ),
+    debts: (
+      <>
+        <path d="M17 8.5a5 5 0 1 0-10 0 5 5 0 0 0 10 0Z" />
+        <path d="M12 6v5l3 1.5" />
+        <path d="M7 15.5l-3 4M17 15.5l3 4" />
+        <path d="M7.5 19.5h9" />
+      </>
+    ),
+    currency: (
+      <>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M14.5 9.5a3 3 0 0 0-5 2.2c0 1.7 1.2 2.8 2.5 3.3 1.3.5 2.5 1.6 2.5 3.3a3 3 0 0 1-5 2.2" />
+        <path d="M12 7v1.5M12 17.5V19" />
+      </>
+    ),
   }
 
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...common}>
       {paths[name] || paths.dashboard}
+    </svg>
+  )
+}
+
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="4.5" />
+      <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+    </svg>
+  )
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79Z" />
     </svg>
   )
 }
