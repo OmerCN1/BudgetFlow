@@ -1,4 +1,4 @@
-import { S, FONT_BODY, FONT_MONO } from "../../constants/theme"
+import { FONT_BODY, FONT_MONO } from "../../constants/theme"
 import { TRY } from "../../utils/helpers"
 
 export default function ChartTooltip({ active, payload, label }) {
@@ -7,16 +7,17 @@ export default function ChartTooltip({ active, payload, label }) {
   return (
     <div
       style={{
-        background: "rgba(14,21,17,0.9)",
-        border: `1px solid ${S.border}`,
+        background: "var(--bf-tooltip-bg)",
+        border: "1px solid var(--bf-tooltip-border)",
         borderRadius: 8,
         padding: "10px 14px",
         fontSize: 12,
-        boxShadow: "0 18px 54px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.08)",
+        color: "var(--bf-tooltip-text)",
+        boxShadow: "var(--bf-tooltip-shadow)",
         backdropFilter: "blur(24px)",
       }}
     >
-      <div style={{ color: S.sub, marginBottom: 5, fontFamily: FONT_BODY }}>
+      <div style={{ color: "var(--bf-tooltip-label)", marginBottom: 5, fontFamily: FONT_BODY }}>
         {label}
       </div>
       {payload.map((p, i) => (

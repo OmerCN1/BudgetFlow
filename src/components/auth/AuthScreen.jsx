@@ -81,7 +81,7 @@ function getAuthErrorMessage(authError) {
   return authError.message
 }
 
-export default function AuthScreen({ isConfigured, initialMode = "login", onBackLanding }) {
+export default function AuthScreen({ isConfigured, initialMode = "login", onBackLanding, onOpenPage }) {
   const [mode, setMode] = useState(initialMode)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -401,9 +401,9 @@ export default function AuthScreen({ isConfigured, initialMode = "login", onBack
           </div>
 
           <footer className="auth2-footer">
-            <a href="#privacy">Gizlilik</a>
-            <a href="#terms">Kullanım Koşulları</a>
-            <a href="#security">Güvenlik</a>
+            <a href="#privacy" onClick={(event) => { event.preventDefault(); onOpenPage("privacy") }}>Gizlilik</a>
+            <a href="#terms" onClick={(event) => { event.preventDefault(); onOpenPage("terms") }}>Kullanım Koşulları</a>
+            <a href="#security" onClick={(event) => { event.preventDefault(); onOpenPage("security") }}>Güvenlik</a>
             <span>© 2026 BudgetFlow</span>
           </footer>
         </div>

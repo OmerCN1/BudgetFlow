@@ -15,6 +15,7 @@ import Notifications, { buildNotifications } from "./components/notifications/No
 import Subscriptions from "./components/subscriptions/Subscriptions"
 import AuthScreen from "./components/auth/AuthScreen"
 import LandingPage from "./components/auth/LandingPage"
+import PublicInfoPage from "./components/auth/PublicInfoPage"
 import Account from "./components/account/Account"
 import DebtTracker from "./components/debts/DebtTracker"
 import CurrencyRates from "./components/currency/CurrencyRates"
@@ -807,26 +808,40 @@ export default function App() {
   }
 
   if (!user) {
+    const openPublicPage = (nextView) => setPublicView(nextView)
+    const openAuth = (mode) => {
+      setAuthMode(mode)
+      setPublicView("auth")
+    }
+
     if (publicView === "auth") {
       return (
         <AuthScreen
           isConfigured={isConfigured}
           initialMode={authMode}
           onBackLanding={() => setPublicView("landing")}
+          onOpenPage={openPublicPage}
+        />
+      )
+    }
+
+    if (["privacy", "terms", "security", "contact"].includes(publicView)) {
+      return (
+        <PublicInfoPage
+          page={publicView}
+          onBackLanding={() => setPublicView("landing")}
+          onLogin={() => openAuth("login")}
+          onSignup={() => openAuth("signup")}
+          onOpenPage={openPublicPage}
         />
       )
     }
 
     return (
       <LandingPage
-        onLogin={() => {
-          setAuthMode("login")
-          setPublicView("auth")
-        }}
-        onSignup={() => {
-          setAuthMode("signup")
-          setPublicView("auth")
-        }}
+        onLogin={() => openAuth("login")}
+        onSignup={() => openAuth("signup")}
+        onOpenPage={openPublicPage}
       />
     )
   }

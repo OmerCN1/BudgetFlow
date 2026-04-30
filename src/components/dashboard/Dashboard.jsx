@@ -401,12 +401,16 @@ export default function Dashboard({ txs, cats, catById, setView }) {
               <Tooltip
                 formatter={(v) => TRY(v)}
                 contentStyle={{
-                  background: "rgba(14,21,17,0.92)",
-                  border: `1px solid ${S.border}`,
+                  background: "var(--bf-tooltip-bg)",
+                  border: "1px solid var(--bf-tooltip-border)",
                   borderRadius: 8,
                   fontSize: 11,
                   fontFamily: FONT_BODY,
+                  color: "var(--bf-tooltip-text)",
+                  boxShadow: "var(--bf-tooltip-shadow)",
                 }}
+                labelStyle={{ color: "var(--bf-tooltip-label)", fontWeight: 700 }}
+                itemStyle={{ color: "var(--bf-tooltip-text)", fontWeight: 700 }}
               />
             </PieChart>
           </ResponsiveContainer>

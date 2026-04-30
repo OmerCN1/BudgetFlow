@@ -70,16 +70,16 @@ export const FONT_MONO = "'JetBrains Mono', monospace"
 
 export const inputStyle = {
   width: "100%",
-  background: "rgba(9,16,12,0.72)",
-  border: `1px solid ${S.border}`,
+  background: "var(--bf-field-bg)",
+  border: "1px solid var(--bf-field-border)",
   borderRadius: 8,
   padding: "11px 12px",
-  color: S.text,
+  color: "var(--bf-field-text)",
   fontSize: 13,
   fontFamily: FONT_BODY,
   outline: "none",
   boxSizing: "border-box",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+  boxShadow: "var(--bf-field-shadow)",
 }
 
 export const btnPrimary = {

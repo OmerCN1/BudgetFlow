@@ -64,7 +64,7 @@ const plans = [
   },
 ]
 
-export default function LandingPage({ onLogin, onSignup }) {
+export default function LandingPage({ onLogin, onSignup, onOpenPage }) {
   const [billing, setBilling] = useState("yearly")
   const yearly = billing === "yearly"
   const navRef = useRef(null)
@@ -128,8 +128,8 @@ export default function LandingPage({ onLogin, onSignup }) {
         <div className="public-nav-links" aria-label="Navigasyon">
           <a href="#features">Özellikler</a>
           <a href="#plans">Planlar</a>
-          <a href="#security">Güvenlik</a>
-          <a href="#contact">İletişim</a>
+          <button type="button" onClick={() => onOpenPage("security")}>Güvenlik</button>
+          <button type="button" onClick={() => onOpenPage("contact")}>İletişim</button>
         </div>
         <div className="public-nav-actions">
           <button onClick={onLogin} type="button" className="public-link-button">Giriş Yap</button>
@@ -435,10 +435,10 @@ export default function LandingPage({ onLogin, onSignup }) {
           <span>© 2026 BudgetFlow. Private Wealth Management Systems.</span>
         </div>
         <div>
-          <a href="#privacy">Privacy Policy</a>
-          <a href="#terms">Terms of Service</a>
-          <a href="#security">Security</a>
-          <a href="#contact">Contact</a>
+          <a href="#privacy" onClick={(event) => { event.preventDefault(); onOpenPage("privacy") }}>Gizlilik Politikası</a>
+          <a href="#terms" onClick={(event) => { event.preventDefault(); onOpenPage("terms") }}>Kullanım Koşulları</a>
+          <a href="#security" onClick={(event) => { event.preventDefault(); onOpenPage("security") }}>Güvenlik</a>
+          <a href="#contact" onClick={(event) => { event.preventDefault(); onOpenPage("contact") }}>İletişim</a>
         </div>
       </footer>
     </div>
