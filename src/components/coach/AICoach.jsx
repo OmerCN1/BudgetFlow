@@ -52,7 +52,7 @@ export default function AICoach({
 
   const starters = [
     "Bu ay nerede para kaçırıyorum?",
-    "3 tasarruf önerisi ver",
+    "En çok hangi mekanlarda harcadım?",
     "Bütçe aşımı risklerimi analiz et",
   ]
 
@@ -421,6 +421,17 @@ function buildProactiveInsights(summary) {
       id: "proactive-recurring",
       title: "Yaklaşan tekrarlı işlem",
       body: `${nextRecurring.name} için sıradaki tarih ${nextRecurring.nextDate}. Nakit akışı planına dahil edildi.`,
+      severity: "info",
+    })
+  }
+
+  const topLocations = summary?.topLocations || []
+  if (topLocations.length > 0) {
+    const top = topLocations[0]
+    insights.push({
+      id: "proactive-top-location",
+      title: "En çok harcanan mekan",
+      body: `Bu ay ${top.location} konumunda ${Math.round(top.amount).toLocaleString("tr-TR")} TL harcandı.`,
       severity: "info",
     })
   }

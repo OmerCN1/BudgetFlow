@@ -95,6 +95,7 @@ export default function App() {
     receiptId: "",
     originalCurrency: "TRY",
     originalAmount: null,
+    location: "",
   })
 
   const [showCatModal, setShowCatModal] = useState(false)
@@ -250,6 +251,7 @@ export default function App() {
       receiptId: "",
       originalCurrency: "TRY",
       originalAmount: null,
+      location: "",
     })
     setEditTx(null)
     setShowTxModal(true)
@@ -267,6 +269,7 @@ export default function App() {
       receiptId: receipts.find((receipt) => receipt.transactionId === t.id)?.id || "",
       originalCurrency: t.originalCurrency || "TRY",
       originalAmount: t.originalAmount != null ? String(t.originalAmount) : null,
+      location: t.location || "",
     })
     setEditTx(t)
     setShowTxModal(true)
@@ -292,6 +295,7 @@ export default function App() {
       originalAmount: txForm.originalCurrency && txForm.originalCurrency !== "TRY" && txForm.originalAmount
         ? parseFloat(txForm.originalAmount) || null
         : null,
+      location: txForm.location?.trim() || null,
     }
 
     setActionLoading(true)
@@ -325,13 +329,19 @@ export default function App() {
       const date = extracted?.date || fallback.date || today()
       const suggested = suggestCategory({ description: desc, cats: activeCats, type: "expense" })
       const tags = ["fiş", ...(suggested?.tags || [])]
+      const items = extracted?.items || []
+      const itemsNote = items.length > 0
+        ? items.map((it) => `• ${it.name}${it.qty !== 1 ? ` x${it.qty}` : ""} — ${formatCurrency(it.totalPrice)}`).join("\n")
+        : ""
+      const notes = [extracted?.notes, itemsNote].filter(Boolean).join("\n")
       const receipt = await saveReceiptFile(user.id, file, {
         merchant: desc,
         amount,
         date,
         paymentMethod: extracted?.paymentMethod || suggested?.paymentMethod || "Kart",
-        notes: extracted?.notes || "",
+        notes,
         confidence: extracted?.confidence || 0,
+        items,
       })
       setReceipts((prev) => [receipt, ...prev])
 
@@ -399,6 +409,7 @@ export default function App() {
       receiptId: receipt.id,
     })
     setEditTx(null)
+    setView("transactions")
     setShowTxModal(true)
   }
 

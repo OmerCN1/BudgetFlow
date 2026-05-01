@@ -5,6 +5,7 @@ import FieldLabel from "../ui/FieldLabel"
 import { supabase } from "../../lib/supabase"
 import { S, FONT_BODY, FONT_MONO, inputStyle, btnGhost, btnPrimary } from "../../constants/theme"
 import { TRY } from "../../utils/helpers"
+import { sendNotification, loadNotificationLogs } from "../../services/budgetService"
 
 const compactDateTime = (dateValue) =>
   dateValue
@@ -35,9 +36,13 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
   const [emailNotif, setEmailNotif] = useState(profile?.notification_email !== false)
   const [pushNotif, setPushNotif] = useState(profile?.notification_push !== false)
   const [smsNotif, setSmsNotif] = useState(Boolean(profile?.notification_sms))
+  const [phoneNumber, setPhoneNumber] = useState(profile?.phone_number || "")
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const [sendingNotif, setSendingNotif] = useState(false)
+  const [notifLogs, setNotifLogs] = useState([])
+  const [showLogs, setShowLogs] = useState(false)
 
   useEffect(() => {
     setDisplayName(profile?.display_name || fallbackName)
@@ -49,6 +54,7 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
     setEmailNotif(profile?.notification_email !== false)
     setPushNotif(profile?.notification_push !== false)
     setSmsNotif(Boolean(profile?.notification_sms))
+    setPhoneNumber(profile?.phone_number || "")
   }, [fallbackName, profile])
 
   const income = useMemo(() => txs.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0), [txs])
@@ -75,12 +81,42 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
         notification_email: emailNotif,
         notification_push: pushNotif,
         notification_sms: smsNotif,
+        phone_number: phoneNumber || null,
       })
       setMessage("Profil güncellendi.")
     } catch (err) {
       setError(err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const triggerNotification = async (type) => {
+    setSendingNotif(true)
+    setError("")
+    setMessage("")
+    try {
+      const result = await sendNotification(user.id, type)
+      const emailSent = Object.values(result?.results || {}).some((r) => r?.email?.sent)
+      const smsSent = Object.values(result?.results || {}).some((r) => r?.sms?.sent)
+      const parts = []
+      if (emailSent) parts.push("e-posta")
+      if (smsSent) parts.push("SMS")
+      setMessage(parts.length > 0 ? `${parts.join(" ve ")} gönderildi.` : "Kritik bildirim yok veya bildirim kanalı etkinleştirilmedi.")
+    } catch (err) {
+      setError(`Bildirim gönderilemedi: ${err.message}`)
+    } finally {
+      setSendingNotif(false)
+    }
+  }
+
+  const fetchLogs = async () => {
+    try {
+      const logs = await loadNotificationLogs(user.id)
+      setNotifLogs(logs)
+      setShowLogs(true)
+    } catch (err) {
+      setError("Loglar yüklenemedi.")
     }
   }
 
@@ -261,10 +297,80 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
           <Card>
             <SectionTitle icon="◉" title="Bildirim Ayarları" />
             <div className="account-toggle-stack">
-              <ToggleRow title="E-posta Bildirimleri" text="Haftalık özet ve raporlar" checked={emailNotif} onChange={setEmailNotif} />
+              <ToggleRow title="E-posta Bildirimleri" text="Haftalık özet ve kritik uyarılar" checked={emailNotif} onChange={setEmailNotif} />
               <ToggleRow title="Push Bildirimleri" text="Anlık işlem uyarıları" checked={pushNotif} onChange={setPushNotif} />
               <ToggleRow title="SMS Uyarıları" text="Güvenlik ve büyük harcamalar" checked={smsNotif} onChange={setSmsNotif} />
             </div>
+            {smsNotif && (
+              <div style={{ marginTop: 12 }}>
+                <FieldLabel>Telefon Numarası (SMS için)</FieldLabel>
+                <input
+                  type="tel"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="+905xxxxxxxxx"
+                  style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
+                />
+                <small style={{ color: S.sub, fontSize: 12, marginTop: 4, display: "block" }}>
+                  Uluslararası format: +90 ile başlayan Türkiye numaraları
+                </small>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
+              <button
+                type="button"
+                onClick={() => triggerNotification("alert")}
+                disabled={sendingNotif}
+                style={{ ...btnPrimary, opacity: sendingNotif ? 0.7 : 1, fontSize: 13, padding: "8px 14px" }}
+              >
+                {sendingNotif ? "Gönderiliyor…" : "Uyarı Gönder"}
+              </button>
+              <button
+                type="button"
+                onClick={() => triggerNotification("weekly")}
+                disabled={sendingNotif}
+                style={{ ...btnGhost, fontSize: 13, padding: "8px 14px" }}
+              >
+                Haftalık Özet Gönder
+              </button>
+              <button
+                type="button"
+                onClick={fetchLogs}
+                style={{ ...btnGhost, fontSize: 13, padding: "8px 14px" }}
+              >
+                Gönderim Geçmişi
+              </button>
+            </div>
+            {showLogs && notifLogs.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <FieldLabel>Son Gönderimler</FieldLabel>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {notifLogs.slice(0, 8).map((log) => (
+                    <div key={log.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: S.surface2 || "#f9f9f9", borderRadius: 8, fontSize: 13 }}>
+                      <div>
+                        <span style={{ fontWeight: 700, color: log.type === "weekly" ? S.cyan : S.amber }}>
+                          {log.type === "weekly" ? "Haftalık Özet" : "Uyarı"}
+                        </span>
+                        <span style={{ color: S.sub, marginLeft: 8 }}>
+                          {log.notification_count} bildirim
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        {log.email_sent && <span style={{ color: S.green, fontSize: 11 }}>✓ E-posta</span>}
+                        {log.sms_sent && <span style={{ color: S.green, fontSize: 11 }}>✓ SMS</span>}
+                        {!log.email_sent && !log.sms_sent && <span style={{ color: S.sub, fontSize: 11 }}>Gönderilmedi</span>}
+                        <span style={{ color: S.muted, fontSize: 11 }}>
+                          {new Date(log.created_at).toLocaleDateString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {showLogs && notifLogs.length === 0 && (
+              <p style={{ color: S.sub, fontSize: 13, marginTop: 12 }}>Henüz bildirim gönderilmemiş.</p>
+            )}
           </Card>
         </div>
       </section>

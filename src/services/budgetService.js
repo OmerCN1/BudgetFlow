@@ -33,6 +33,7 @@ const toTransaction = (row) => ({
   recurringRuleId: row.recurring_rule_id || null,
   originalCurrency: row.original_currency || "TRY",
   originalAmount: row.original_amount != null ? Number(row.original_amount) : null,
+  location: row.location || "",
 })
 
 const fromCategory = (category, userId) => ({
@@ -58,6 +59,7 @@ const fromTransaction = (transaction, userId) => ({
   recurring_rule_id: transaction.recurringRuleId || null,
   original_currency: transaction.originalCurrency || "TRY",
   original_amount: transaction.originalAmount ?? null,
+  location: transaction.location || null,
 })
 
 const fromLegacyTransaction = (transaction, userId) => ({
@@ -1426,10 +1428,30 @@ export async function addDebtPayment(userId, payment) {
   return toDebtPayment(data)
 }
 
+export async function sendNotification(userId, type = "alert") {
+  const { data, error } = await supabase.functions.invoke("send-notifications", {
+    body: { user_id: userId, type },
+  })
+  if (error) throw error
+  return data
+}
+
+export async function loadNotificationLogs(userId) {
+  const { data, error } = await supabase
+    .from("notification_logs")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(20)
+  if (error) throw error
+  return data || []
+}
+
 function buildLocalCoachResponse(message, summary) {
   const totals = summary?.totals || { income: 0, expense: 0, net: 0 }
   const previous = summary?.previousMonthTotals || { expense: 0 }
   const topCategory = summary?.topExpenseCategories?.[0]
+  const topLocation = summary?.topLocations?.[0]
   const budgetRisk = summary?.budgetStatus?.find((item) => item.remaining < 0)
     || summary?.budgetStatus?.find((item) => item.budget > 0 && item.spent / item.budget >= 0.8)
 
@@ -1441,6 +1463,9 @@ function buildLocalCoachResponse(message, summary) {
 
   if (topCategory) {
     lines.push(`En yüksek gider kategoriniz ${topCategory.name}: ${Math.round(topCategory.value).toLocaleString("tr-TR")} TL.`)
+  }
+  if (topLocation) {
+    lines.push(`Bu ay en çok harcama yaptığınız mekan: ${topLocation.location} (${Math.round(topLocation.amount).toLocaleString("tr-TR")} TL).`)
   }
   if (budgetRisk) {
     lines.push(`${budgetRisk.name} bütçesinde dikkat gerekiyor; kalan tutar ${Math.round(budgetRisk.remaining).toLocaleString("tr-TR")} TL.`)

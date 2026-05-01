@@ -56,9 +56,10 @@ export default function Transactions({
           if (filters.from && t.date < filters.from)   return false
           if (filters.to   && t.date > filters.to)     return false
           if (filters.paymentMethod && t.paymentMethod !== filters.paymentMethod) return false
+          if (filters.location && !(t.location || "").toLowerCase().includes(filters.location.toLowerCase())) return false
           if (filters.q) {
             const c = catById(t.cat)
-            const haystack = `${t.desc || ""} ${c?.name || ""} ${(t.tags || []).join(" ")}`.toLowerCase()
+            const haystack = `${t.desc || ""} ${c?.name || ""} ${(t.tags || []).join(" ")} ${t.location || ""}`.toLowerCase()
             if (!haystack.includes(filters.q.toLowerCase())) return false
           }
           return true
@@ -67,8 +68,8 @@ export default function Transactions({
     [txs, filters, catById, sort]
   )
 
-  const hasFilters = filters.type || filters.cat || filters.from || filters.to || filters.q || filters.paymentMethod
-  const clearFilters = () => setFilters({ type: "", cat: "", from: "", to: "", q: "", paymentMethod: "" })
+  const hasFilters = filters.type || filters.cat || filters.from || filters.to || filters.q || filters.paymentMethod || filters.location
+  const clearFilters = () => setFilters({ type: "", cat: "", from: "", to: "", q: "", paymentMethod: "", location: "" })
   const selectedSet = new Set(selectedIds)
   const allVisibleSelected = filteredTxs.length > 0 && filteredTxs.every((tx) => selectedSet.has(tx.id))
   const receiptsByTx = useMemo(() => {
@@ -190,6 +191,17 @@ export default function Transactions({
               ),
             },
             {
+              label: "Mekan",
+              el: (
+                <input
+                  value={filters.location || ""}
+                  onChange={(e) => setFilters((p) => ({ ...p, location: e.target.value }))}
+                  placeholder="Şehir, market..."
+                  style={inputStyle}
+                />
+              ),
+            },
+            {
               label: "Başlangıç Tarihi",
               el: (
                 <input
@@ -288,13 +300,13 @@ export default function Transactions({
         >
           <thead>
             <tr style={{ borderBottom: `1px solid ${S.border}` }}>
-              {["", "Tarih", "Açıklama", "Kategori", "Ödeme", "Tür", "Tutar", ""].map(
+              {["", "Tarih", "Açıklama", "Kategori", "Mekan", "Ödeme", "Tür", "Tutar", ""].map(
                 (h, i) => (
                   <th
                     key={i}
                     style={{
                       padding: "11px 14px",
-                      textAlign: i >= 5 ? "right" : "left",
+                      textAlign: i >= 6 ? "right" : "left",
                       fontSize: 10,
                       fontWeight: 700,
                       color: S.muted,
@@ -378,6 +390,19 @@ export default function Transactions({
                       />
                       {c?.name || "—"}
                     </span>
+                  </td>
+                  <td
+                    style={{
+                      padding: "11px 14px",
+                      fontSize: 11,
+                      color: S.muted,
+                      maxWidth: 120,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {t.location || "—"}
                   </td>
                   <td
                     style={{
@@ -645,6 +670,18 @@ export default function Transactions({
               value={txForm.tags || ""}
               onChange={(e) =>
                 setTxForm((p) => ({ ...p, tags: e.target.value }))
+              }
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <FieldLabel>Mekan (isteğe bağlı)</FieldLabel>
+            <input
+              type="text"
+              placeholder="İstanbul, Migros, AVM..."
+              value={txForm.location || ""}
+              onChange={(e) =>
+                setTxForm((p) => ({ ...p, location: e.target.value }))
               }
               style={inputStyle}
             />

@@ -40,7 +40,39 @@ alter table public.profiles
   add column if not exists two_factor_enabled boolean not null default false,
   add column if not exists notification_email boolean not null default true,
   add column if not exists notification_push boolean not null default true,
-  add column if not exists notification_sms boolean not null default false;
+  add column if not exists notification_sms boolean not null default false,
+  add column if not exists phone_number text;
+
+create table if not exists public.notification_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  type text not null default 'alert' check (type in ('alert', 'weekly')),
+  notification_count int not null default 0,
+  email_sent boolean not null default false,
+  sms_sent boolean not null default false,
+  email_error text,
+  sms_error text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists notification_logs_user_id_idx on public.notification_logs(user_id);
+create index if not exists notification_logs_created_at_idx on public.notification_logs(created_at);
+
+alter table public.notification_logs enable row level security;
+
+drop policy if exists "Users can read own notification logs" on public.notification_logs;
+create policy "Users can read own notification logs"
+on public.notification_logs
+for select
+to authenticated
+using ((select auth.uid()) = user_id);
+
+drop policy if exists "Service role can insert notification logs" on public.notification_logs;
+create policy "Service role can insert notification logs"
+on public.notification_logs
+for insert
+to service_role
+with check (true);
 
 alter table public.categories
   add column if not exists icon text not null default 'Gider',
@@ -52,7 +84,8 @@ alter table public.transactions
   add column if not exists source text not null default 'manual',
   add column if not exists recurring_rule_id uuid,
   add column if not exists original_currency text not null default 'TRY',
-  add column if not exists original_amount numeric(12, 4);
+  add column if not exists original_amount numeric(12, 4),
+  add column if not exists location text;
 
 create table if not exists public.goals (
   id uuid primary key default gen_random_uuid(),

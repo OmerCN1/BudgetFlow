@@ -188,9 +188,20 @@ export default function Receipts({
                 <strong>{preview.receipt.merchant || preview.receipt.fileName}</strong>
                 <span>{preview.receipt.date || "Tarih yok"} · {preview.receipt.amount ? TRY(preview.receipt.amount) : "Tutar yok"}</span>
               </div>
-              <button type="button" onClick={() => setPreview(null)}>Kapat</button>
+              <div style={{ display: "flex", gap: 8 }}>
+                {!txById.get(preview.receipt.transactionId) && (
+                  <button type="button" style={btnPrimary} onClick={() => { onUse?.(preview.receipt); setPreview(null) }}>İşleştir</button>
+                )}
+                <button type="button" onClick={() => setPreview(null)}>Kapat</button>
+              </div>
             </div>
             <img src={preview.url} alt={preview.receipt.merchant || preview.receipt.fileName} />
+            {preview.receipt.notes && (
+              <div className="receipt-lightbox-notes">
+                <strong>Ürün Detayları</strong>
+                <pre>{preview.receipt.notes}</pre>
+              </div>
+            )}
           </div>
         </div>
       )}

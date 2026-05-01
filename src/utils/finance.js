@@ -86,6 +86,20 @@ export const buildCoachSummary = ({ txs, cats, goals, recurringRules }) => {
       amount: rule.amount,
       nextDate: rule.nextDate,
     })),
+    topLocations: buildTopLocations(thisMonthTxs),
   }
+}
+
+function buildTopLocations(txs) {
+  const totals = new Map()
+  for (const tx of txs) {
+    if (!tx.location || tx.type !== "expense") continue
+    const key = tx.location.trim()
+    totals.set(key, (totals.get(key) || 0) + tx.amount)
+  }
+  return [...totals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([location, amount]) => ({ location, amount }))
 }
 

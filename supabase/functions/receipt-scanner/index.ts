@@ -15,8 +15,22 @@ const receiptSchema = {
     paymentMethod: { type: "string", enum: ["Kart", "Nakit", "Banka", "Dijital"] },
     notes: { type: "string" },
     confidence: { type: "number" },
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          name: { type: "string" },
+          qty: { type: "number" },
+          unitPrice: { type: "number" },
+          totalPrice: { type: "number" },
+        },
+        required: ["name", "qty", "unitPrice", "totalPrice"],
+      },
+    },
   },
-  required: ["merchant", "amount", "date", "paymentMethod", "notes", "confidence"],
+  required: ["merchant", "amount", "date", "paymentMethod", "notes", "confidence", "items"],
 }
 
 serve(async (req) => {
@@ -27,7 +41,7 @@ serve(async (req) => {
   const apiKey = Deno.env.get("GROQ_API_KEY")
   if (!apiKey) {
     return Response.json(
-      { merchant: "", amount: 0, date: "", paymentMethod: "Kart", notes: "GROQ_API_KEY yok.", confidence: 0 },
+      { merchant: "", amount: 0, date: "", paymentMethod: "Kart", notes: "GROQ_API_KEY yok.", confidence: 0, items: [] },
       { headers: corsHeaders }
     )
   }
@@ -49,13 +63,33 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content:
-              `Sen BudgetFlow için Türkçe fiş ve makbuz okuma yardımcısısın. Görselden sadece satıcı adı, toplam tutar, tarih ve ödeme yöntemini çıkar. Emin olmadığında boş string veya 0 kullan. Tarihi YYYY-MM-DD biçiminde döndür. Yalnızca şu JSON şemasına uyan geçerli JSON döndür: ${JSON.stringify(receiptSchema)}`,
+            content: `Sen BudgetFlow için Türkçe fiş ve makbuz okuma uzmanısın.
+
+Görseldeki fişten şu bilgileri çıkar:
+- merchant: İşletme/mağaza adı (fişteki header'dan al, net değilse tahmin et)
+- amount: KDV dahil toplam tutar (TOPLAM, GENEL TOPLAM, ÖDENECEK TUTAR satırından al)
+- date: Tarih, YYYY-MM-DD formatında
+- paymentMethod: "Kart" (kredi/banka kartı), "Nakit" (cash), "Banka" (havale/EFT), "Dijital" (online ödeme)
+- notes: Varsa indirim, kampanya veya özel bilgi; yoksa boş string
+- confidence: Okumanın güven skoru 0-100 arası (net görüntü=90+, bulanık=50-)
+- items: Fişteki her ürün/kalem için dizi. Her kalem için:
+  - name: Ürün adı (kısaltmaları açmaya çalış, Türkçe karakter düzelt)
+  - qty: Adet/miktar (varsayılan 1)
+  - unitPrice: Birim fiyat
+  - totalPrice: Toplam fiyat (qty * unitPrice)
+
+ÖNEMLİ KURALLAR:
+1. items dizisi boş olabilir ama mutlaka döndür
+2. Ürün satırları genellikle: [ürün adı] [adet] x [birim fiyat] = [toplam] formatındadır
+3. İNDİRİM, KDV, TOPLAM gibi satırları items'a ekleme
+4. amount alanı her zaman fişin en alt satırındaki toplam olmalı
+5. Emin olmadığın alanlarda boş string veya 0 kullan, asla uydurma
+6. Yalnızca şu JSON şemasına uyan geçerli JSON döndür: ${JSON.stringify(receiptSchema)}`,
           },
           {
             role: "user",
             content: [
-              { type: "text", text: `Dosya adı: ${fileName || "receipt"}. Toplam tutarı, tarihi ve işletme adını çıkar.` },
+              { type: "text", text: `Dosya adı: ${fileName || "receipt"}. Fişi kalem kalem analiz et ve tüm ürünleri items dizisine ekle.` },
               { type: "image_url", image_url: { url: imageDataUrl } },
             ],
           },
@@ -76,7 +110,7 @@ serve(async (req) => {
     return Response.json(JSON.parse(outputText), { headers: corsHeaders })
   } catch (error) {
     return Response.json(
-      { merchant: "", amount: 0, date: "", paymentMethod: "Kart", notes: error.message || "Fiş okunamadı.", confidence: 0 },
+      { merchant: "", amount: 0, date: "", paymentMethod: "Kart", notes: error.message || "Fiş okunamadı.", confidence: 0, items: [] },
       { headers: corsHeaders, status: 200 }
     )
   }
