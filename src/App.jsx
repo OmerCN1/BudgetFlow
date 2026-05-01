@@ -19,6 +19,8 @@ import PublicInfoPage from "./components/auth/PublicInfoPage"
 import Account from "./components/account/Account"
 import DebtTracker from "./components/debts/DebtTracker"
 import CurrencyRates from "./components/currency/CurrencyRates"
+import Assets from "./components/assets/Assets"
+import CreditCards from "./components/creditcards/CreditCards"
 import Card from "./components/ui/Card"
 
 import { useAuth } from "./hooks/useAuth"
@@ -48,7 +50,11 @@ import {
   settleDebt,
   updateProfile,
   updateTransactions,
+  loadCreditCards,
+  saveCreditCard,
+  deleteCreditCard,
 } from "./services/budgetService"
+import { loadAssets, saveAsset, deleteAsset } from "./services/assetService"
 import { PALETTE, FONT_BODY, S, btnPrimary } from "./constants/theme"
 import { today, sum } from "./utils/helpers"
 import { extractReceiptFieldsFromText, suggestCategory } from "./utils/categorySuggestions"
@@ -71,6 +77,8 @@ export default function App() {
   const [profile, setProfile] = useState(null)
   const [debts, setDebts] = useState([])
   const [debtPayments, setDebtPayments] = useState([])
+  const [assets, setAssets] = useState([])
+  const [creditCards, setCreditCards] = useState([])
   const [view, setView] = useState("dashboard")
   const [dataLoading, setDataLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
@@ -153,6 +161,12 @@ export default function App() {
             setDebtPayments(dp)
           })
           .catch(() => {})
+        loadAssets(user.id)
+          .then((data) => setAssets(data))
+          .catch(() => {})
+        loadCreditCards(user.id)
+          .then((data) => setCreditCards(data))
+          .catch(() => {})
       })
       .catch((err) => {
         if (refreshSeqRef.current !== requestSeq) return
@@ -193,6 +207,8 @@ export default function App() {
       setProfile(null)
       setDebts([])
       setDebtPayments([])
+      setAssets([])
+      setCreditCards([])
       setHasLoadedData(false)
       setDataLoading(false)
       setView("dashboard")
@@ -617,6 +633,65 @@ export default function App() {
     }
   }
 
+  const handleSaveAsset = async (asset, editId) => {
+    setActionLoading(true)
+    try {
+      const saved = await saveAsset(user.id, asset, editId)
+      setAssets((prev) => editId ? prev.map((a) => a.id === editId ? saved : a) : [saved, ...prev])
+      showNotice(editId ? "Varlık güncellendi." : "Varlık eklendi.")
+    } catch (err) {
+      showError(err.message || "Varlık kaydedilemedi.")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleDeleteAsset = async (id) => {
+    const ok = window.confirm("Bu varlık silinsin mi?")
+    if (!ok) return
+    setActionLoading(true)
+    try {
+      await deleteAsset(user.id, id)
+      setAssets((prev) => prev.filter((a) => a.id !== id))
+      showNotice("Varlık silindi.")
+    } catch (err) {
+      showError(err.message || "Varlık silinemedi.")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleSaveCreditCard = async (card, editId) => {
+    setActionLoading(true)
+    try {
+      const id = await saveCreditCard(user.id, card, editId)
+      const saved = { ...card, id }
+      setCreditCards((prev) =>
+        editId ? prev.map((c) => c.id === editId ? saved : c) : [...prev, saved]
+      )
+      showNotice(editId ? "Kart güncellendi." : "Kart eklendi.")
+    } catch (err) {
+      showError(err.message || "Kart kaydedilemedi.")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleDeleteCreditCard = async (id) => {
+    const ok = window.confirm("Bu kredi kartı silinsin mi?")
+    if (!ok) return
+    setActionLoading(true)
+    try {
+      await deleteCreditCard(user.id, id)
+      setCreditCards((prev) => prev.filter((c) => c.id !== id))
+      showNotice("Kart silindi.")
+    } catch (err) {
+      showError(err.message || "Kart silinemedi.")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   const handleSettleDebt = async (id) => {
     setActionLoading(true)
     try {
@@ -985,6 +1060,13 @@ export default function App() {
                   onNewChat={handleNewAiChat}
                 />
               )}
+              {view === "assets" && (
+                <Assets
+                  assets={assets}
+                  onSaveAsset={handleSaveAsset}
+                  onDeleteAsset={handleDeleteAsset}
+                />
+              )}
               {view === "debts" && (
                 <DebtTracker
                   debts={debts}
@@ -993,6 +1075,14 @@ export default function App() {
                   onDeleteDebt={handleDeleteDebt}
                   onSettleDebt={handleSettleDebt}
                   onAddPayment={handleAddDebtPayment}
+                />
+              )}
+              {view === "creditcards" && (
+                <CreditCards
+                  creditCards={creditCards}
+                  onSave={handleSaveCreditCard}
+                  onDelete={handleDeleteCreditCard}
+                  theme={theme}
                 />
               )}
               {view === "currency" && <CurrencyRates />}

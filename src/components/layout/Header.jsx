@@ -21,6 +21,8 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
     { id: "coach",         label: "AI Koç",      icon: "coach",         group: "Analiz" },
     { id: "calendar",      label: "Takvim",      icon: "calendar",      group: "Yönetim" },
     { id: "goals",         label: "Hedefler",    icon: "goals",         group: "Yönetim" },
+    { id: "assets",        label: "Varlıklar",   icon: "assets",        group: "Yönetim" },
+    { id: "creditcards",   label: "Kredi Kartları", icon: "creditcards", group: "Yönetim" },
     { id: "debts",         label: "Borçlar",     icon: "debts",         group: "Yönetim" },
     { id: "subscriptions", label: "Abonelikler", icon: "subscriptions", group: "Yönetim" },
     { id: "categories",    label: "Kategoriler", icon: "categories",    group: "Yönetim" },
@@ -315,6 +317,18 @@ function NavIcon({ name }) {
         <circle cx="12" cy="12" r="8.5" />
         <path d="M14.5 9.5a3 3 0 0 0-5 2.2c0 1.7 1.2 2.8 2.5 3.3 1.3.5 2.5 1.6 2.5 3.3a3 3 0 0 1-5 2.2" />
         <path d="M12 7v1.5M12 17.5V19" />
+      </>
+    ),
+    assets: (
+      <>
+        <path d="M12 3.5l2.2 5.5 5.8.5-4.4 4 1.4 5.8L12 16.2l-5 3.1 1.4-5.8L4 9.5l5.8-.5L12 3.5Z" />
+      </>
+    ),
+    creditcards: (
+      <>
+        <rect x="3" y="6" width="18" height="13" rx="2.5" />
+        <path d="M3 10h18" />
+        <path d="M7 14h3M15 14h2" />
       </>
     ),
   }

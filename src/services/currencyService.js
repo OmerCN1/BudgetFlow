@@ -86,20 +86,25 @@ export async function fetchRates() {
 
 // Convert amount from sourceCurrency to TRY
 export function toTRY(amount, fromCurrency, rates) {
-  if (!fromCurrency || fromCurrency === "TRY") return amount
+  const n = Number(amount)
+  if (!isFinite(n)) return 0
+  if (!fromCurrency || fromCurrency === "TRY") return n
   const rate = rates?.[fromCurrency] ?? 1
-  return amount * rate
+  return n * rate
 }
 
 // Convert TRY to target currency
 export function fromTRY(amount, toCurrency, rates) {
-  if (!toCurrency || toCurrency === "TRY") return amount
+  const n = Number(amount)
+  if (!isFinite(n)) return 0
+  if (!toCurrency || toCurrency === "TRY") return n
   const rate = rates?.[toCurrency] ?? 1
-  return amount / rate
+  return rate > 0 ? n / rate : 0
 }
 
 export function formatForeign(amount, currency) {
+  const n = Number(amount) || 0
   const sym = CURRENCY_SYMBOLS[currency] || currency
   const decimals = currency === "JPY" ? 0 : 2
-  return `${sym}${amount.toLocaleString("tr-TR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`
+  return `${sym}${n.toLocaleString("tr-TR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`
 }

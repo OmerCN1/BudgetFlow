@@ -16,7 +16,7 @@ import FieldLabel from "../ui/FieldLabel"
 import ChartTooltip from "../ui/ChartTooltip"
 import { S, FONT_BODY, FONT_MONO } from "../../constants/theme"
 import { TRY, sum } from "../../utils/helpers"
-import { categoryTotals, currentMonthKey, previousMonthKey, totalsFor, transactionsForMonth } from "../../utils/finance"
+import { calculateHealthScore, categoryTotals, currentMonthKey, previousMonthKey, totalsFor, transactionsForMonth } from "../../utils/finance"
 
 export default function Dashboard({ txs, cats, catById, setView }) {
   const [period, setPeriod] = useState("month")
@@ -586,24 +586,3 @@ function filterTransactionsByPeriod(txs, period) {
   return txs.filter((tx) => tx.date >= fromKey)
 }
 
-function calculateHealthScore({ totals, budgetRisks, cats }) {
-  let score = 82
-  if (totals.income > 0) {
-    const expenseRatio = totals.expense / totals.income
-    if (expenseRatio > 1) score -= 24
-    else if (expenseRatio > 0.85) score -= 14
-    else if (expenseRatio < 0.65) score += 6
-  } else if (totals.expense > 0) {
-    score -= 20
-  }
-
-  budgetRisks.forEach((risk) => {
-    score -= risk.pct >= 100 ? 14 : 7
-  })
-
-  const budgetedCount = cats.filter((cat) => !cat.isIncome && !cat.isArchived && cat.budget > 0).length
-  if (budgetedCount >= 3) score += 5
-  if (totals.net > 0) score += 7
-
-  return Math.max(0, Math.min(100, Math.round(score)))
-}

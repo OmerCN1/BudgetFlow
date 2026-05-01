@@ -379,3 +379,61 @@ using (
   bucket_id = 'receipts'
   and (storage.foldername(name))[1] = (select auth.uid())::text
 );
+
+-- Assets (Varlıklar)
+create table if not exists public.assets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  asset_type text not null check (asset_type in ('gold', 'silver', 'currency', 'bank', 'other')),
+  gold_unit text check (gold_unit in ('gram', 'quarter', 'half', 'full', 'ata', 'republic')),
+  currency_code text,
+  quantity numeric(18, 6) not null default 0 check (quantity >= 0),
+  unit_cost numeric(18, 4),
+  note text,
+  is_archived boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists assets_user_id_idx on public.assets(user_id);
+
+alter table public.assets enable row level security;
+
+drop policy if exists "Users can manage their own assets" on public.assets;
+create policy "Users can manage their own assets"
+on public.assets
+for all
+to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+
+-- Kredi Kartları
+create table if not exists public.credit_cards (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  bank_name text not null default '',
+  card_type text not null default 'Visa' check (card_type in ('Visa', 'Mastercard', 'Amex', 'Troy', 'Diğer')),
+  credit_limit numeric(12, 2) not null check (credit_limit >= 0),
+  current_debt numeric(12, 2) not null default 0 check (current_debt >= 0),
+  statement_day integer not null check (statement_day between 1 and 31),
+  due_day integer not null check (due_day between 1 and 31),
+  min_payment_rate numeric(5, 2) not null default 3.00,
+  color text not null default '#4edea3',
+  is_archived boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists credit_cards_user_id_idx on public.credit_cards(user_id);
+
+alter table public.credit_cards enable row level security;
+
+drop policy if exists "Users can manage their own credit cards" on public.credit_cards;
+create policy "Users can manage their own credit cards"
+on public.credit_cards
+for all
+to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);

@@ -846,7 +846,12 @@ export async function loadBudgetData(user) {
 }
 
 export async function saveTransaction(userId, transaction, editId) {
-  const payload = fromTransaction(transaction, userId)
+  if (!userId) throw new Error("userId gerekli")
+  if (!transaction.cat) throw new Error("Kategori seçilmesi zorunludur")
+  if (!transaction.date) throw new Error("Tarih girilmesi zorunludur")
+  const amount = Number(transaction.amount)
+  if (!isFinite(amount) || amount < 0) throw new Error("Geçersiz tutar")
+  const payload = fromTransaction({ ...transaction, amount }, userId)
   if (editId) {
     let { data, error } = await supabase
       .from("transactions")
@@ -972,6 +977,9 @@ export async function updateTransactions(userId, ids, patch) {
 }
 
 export async function saveCategory(userId, category, editId) {
+  if (!userId) throw new Error("userId gerekli")
+  if (!category.name?.trim()) throw new Error("Kategori adı zorunludur")
+  if (!category.color?.trim()) throw new Error("Kategori rengi zorunludur")
   const payload = fromCategory(category, userId)
   const legacyPayload = {
     user_id: userId,
@@ -1074,9 +1082,13 @@ export async function updateProfile(userId, values) {
 }
 
 export async function saveGoal(userId, goal, editId) {
+  if (!userId) throw new Error("userId gerekli")
+  if (!goal.name?.trim()) throw new Error("Hedef adı zorunludur")
+  const targetAmount = Number(goal.targetAmount)
+  if (!isFinite(targetAmount) || targetAmount < 0) throw new Error("Geçersiz hedef tutarı")
   const query = editId
-    ? supabase.from("goals").update(fromGoal(goal, userId)).eq("id", editId).eq("user_id", userId)
-    : supabase.from("goals").insert(fromGoal(goal, userId))
+    ? supabase.from("goals").update(fromGoal({ ...goal, targetAmount }, userId)).eq("id", editId).eq("user_id", userId)
+    : supabase.from("goals").insert(fromGoal({ ...goal, targetAmount }, userId))
 
   const { data, error } = await query.select().single()
   if (error) throw error
@@ -1094,12 +1106,16 @@ export async function deleteGoal(userId, id) {
 }
 
 export async function addGoalContribution(userId, contribution) {
+  if (!userId) throw new Error("userId gerekli")
+  if (!contribution.goalId) throw new Error("goalId gerekli")
+  const amount = Number(contribution.amount)
+  if (!isFinite(amount) || amount <= 0) throw new Error("Katkı tutarı sıfırdan büyük olmalıdır")
   const { data, error } = await supabase
     .from("goal_contributions")
     .insert({
       user_id: userId,
       goal_id: contribution.goalId,
-      amount: contribution.amount,
+      amount,
       contribution_date: contribution.date,
       note: contribution.note || null,
     })
@@ -1378,7 +1394,11 @@ export async function loadDebts(userId) {
 }
 
 export async function saveDebt(userId, debt, editId) {
-  const payload = fromDebt(debt, userId)
+  if (!userId) throw new Error("userId gerekli")
+  if (!debt.personName?.trim()) throw new Error("Kişi adı zorunludur")
+  const amount = Number(debt.amount)
+  if (!isFinite(amount) || amount < 0) throw new Error("Geçersiz borç tutarı")
+  const payload = fromDebt({ ...debt, amount }, userId)
   const query = editId
     ? supabase.from("debts").update(payload).eq("id", editId).eq("user_id", userId)
     : supabase.from("debts").insert(payload)
@@ -1412,12 +1432,16 @@ export async function deleteDebt(userId, id) {
 }
 
 export async function addDebtPayment(userId, payment) {
+  if (!userId) throw new Error("userId gerekli")
+  if (!payment.debtId) throw new Error("debtId gerekli")
+  const amount = Number(payment.amount)
+  if (!isFinite(amount) || amount <= 0) throw new Error("Ödeme tutarı sıfırdan büyük olmalıdır")
   const { data, error } = await supabase
     .from("debt_payments")
     .insert({
       user_id: userId,
       debt_id: payment.debtId,
-      amount: payment.amount,
+      amount,
       payment_date: payment.paymentDate,
       note: payment.note || null,
     })
@@ -1488,4 +1512,78 @@ function buildLocalCoachResponse(message, summary) {
       },
     ],
   }
+}
+
+// ─── Kredi Kartları ────────────────────────────────────────────────────────
+
+const toCreditCard = (row) => ({
+  id: row.id,
+  name: row.name,
+  bankName: row.bank_name,
+  cardType: row.card_type,
+  creditLimit: Number(row.credit_limit),
+  currentDebt: Number(row.current_debt),
+  statementDay: row.statement_day,
+  dueDay: row.due_day,
+  minPaymentRate: Number(row.min_payment_rate),
+  color: row.color,
+  isArchived: row.is_archived,
+  createdAt: row.created_at,
+})
+
+const fromCreditCard = (card, userId) => ({
+  user_id: userId,
+  name: card.name,
+  bank_name: card.bankName || '',
+  card_type: card.cardType || 'Visa',
+  credit_limit: card.creditLimit || 0,
+  current_debt: card.currentDebt || 0,
+  statement_day: card.statementDay || 1,
+  due_day: card.dueDay || 15,
+  min_payment_rate: card.minPaymentRate || 3,
+  color: card.color || '#4edea3',
+  is_archived: Boolean(card.isArchived),
+})
+
+export async function loadCreditCards(userId) {
+  const { data, error } = await supabase
+    .from('credit_cards')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_archived', false)
+    .order('created_at', { ascending: true })
+  if (error) {
+    if (isSchemaMissing(error)) return []
+    throw error
+  }
+  return (data || []).map(toCreditCard)
+}
+
+export async function saveCreditCard(userId, card, editId) {
+  const payload = fromCreditCard(card, userId)
+  if (editId) {
+    const { error } = await supabase
+      .from('credit_cards')
+      .update({ ...payload, updated_at: new Date().toISOString() })
+      .eq('id', editId)
+      .eq('user_id', userId)
+    if (error) throw error
+    return editId
+  }
+  const { data, error } = await supabase
+    .from('credit_cards')
+    .insert(payload)
+    .select('id')
+    .single()
+  if (error) throw error
+  return data.id
+}
+
+export async function deleteCreditCard(userId, cardId) {
+  const { error } = await supabase
+    .from('credit_cards')
+    .update({ is_archived: true, updated_at: new Date().toISOString() })
+    .eq('id', cardId)
+    .eq('user_id', userId)
+  if (error) throw error
 }

@@ -5,7 +5,7 @@ export const TRY = (n) =>
     minimumFractionDigits: 0,
   }).format(n)
 
-export const sum = (arr) => arr.reduce((s, t) => s + t.amount, 0)
+export const sum = (arr) => arr.reduce((s, t) => s + Number(t?.amount || 0), 0)
 
 export const today = () => new Date().toISOString().slice(0, 10)
 

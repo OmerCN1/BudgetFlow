@@ -14,9 +14,9 @@ export function useAuth() {
 
     let mounted = true
 
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(({ data, error }) => {
       if (mounted) {
-        setSession(data.session)
+        if (!error) setSession(data.session)
         setLoading(false)
       }
     })
