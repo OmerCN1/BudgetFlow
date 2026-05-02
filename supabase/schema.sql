@@ -437,3 +437,147 @@ for all
 to authenticated
 using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
+
+-- ─── ADMIN PANEL MIGRATION ────────────────────────────────────────────────────
+
+-- 1. profiles'a role ve is_banned kolonları
+alter table public.profiles
+  add column if not exists role text not null default 'user'
+    check (role in ('user', 'admin'));
+
+alter table public.profiles
+  add column if not exists is_banned boolean not null default false;
+
+create index if not exists profiles_role_idx on public.profiles(role);
+
+-- 2. admin_logs tablosu
+create table if not exists public.admin_logs (
+  id uuid primary key default gen_random_uuid(),
+  admin_id uuid not null references auth.users(id) on delete cascade,
+  action text not null,
+  target_user_id uuid references auth.users(id) on delete set null,
+  details jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists admin_logs_admin_id_idx on public.admin_logs(admin_id);
+create index if not exists admin_logs_created_at_idx on public.admin_logs(created_at);
+
+alter table public.admin_logs enable row level security;
+
+drop policy if exists "Admins can read audit logs" on public.admin_logs;
+create policy "Admins can read audit logs"
+on public.admin_logs
+for select
+to authenticated
+using (
+  exists (
+    select 1 from public.profiles
+    where user_id = (select auth.uid()) and role = 'admin'
+  )
+);
+
+drop policy if exists "Admins can insert audit logs" on public.admin_logs;
+create policy "Admins can insert audit logs"
+on public.admin_logs
+for insert
+to authenticated
+with check (
+  admin_id = (select auth.uid())
+  and exists (
+    select 1 from public.profiles
+    where user_id = (select auth.uid()) and role = 'admin'
+  )
+);
+
+-- 3. profiles RLS: eski "for all" policy'yi böl
+drop policy if exists "Users can manage their own profiles" on public.profiles;
+drop policy if exists "Users can write their own profiles" on public.profiles;
+
+create policy "Users can write their own profiles"
+on public.profiles
+for all
+to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Admins can read all profiles" on public.profiles;
+create policy "Admins can read all profiles"
+on public.profiles
+for select
+to authenticated
+using (
+  (select auth.uid()) = user_id
+  or exists (
+    select 1 from public.profiles as self
+    where self.user_id = (select auth.uid()) and self.role = 'admin'
+  )
+);
+
+-- 4. Admin cross-read: transactions
+drop policy if exists "Admins can read all transactions" on public.transactions;
+create policy "Admins can read all transactions"
+on public.transactions
+for select
+to authenticated
+using (
+  (select auth.uid()) = user_id
+  or exists (
+    select 1 from public.profiles
+    where user_id = (select auth.uid()) and role = 'admin'
+  )
+);
+
+-- 5. Admin cross-read: notification_logs
+drop policy if exists "Admins can read all notification_logs" on public.notification_logs;
+create policy "Admins can read all notification_logs"
+on public.notification_logs
+for select
+to authenticated
+using (
+  (select auth.uid()) = user_id
+  or exists (
+    select 1 from public.profiles
+    where user_id = (select auth.uid()) and role = 'admin'
+  )
+);
+
+-- 6. Email erişimi için security definer function
+create or replace function public.get_all_user_profiles()
+returns table (
+  user_id uuid,
+  email text,
+  display_name text,
+  user_role text,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (
+    select 1 from public.profiles as chk
+    where chk.user_id = auth.uid() and chk.role = 'admin'
+  ) then
+    raise exception 'Access denied: admin role required';
+  end if;
+
+  return query
+  select
+    p.user_id,
+    u.email::text,
+    p.display_name,
+    p.role as user_role,
+    p.created_at,
+    p.updated_at
+  from public.profiles p
+  join auth.users u on u.id = p.user_id
+  order by p.created_at desc;
+end;
+$$;
+
+grant execute on function public.get_all_user_profiles() to authenticated;
+
+-- ─── END ADMIN PANEL MIGRATION ───────────────────────────────────────────────

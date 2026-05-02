@@ -220,10 +220,12 @@ const advanceRecurringDate = (dateString, frequency) => {
 const categoryDedupeKey = (category) =>
   `${String(category.name || "").trim().toLocaleLowerCase("tr-TR")}:${Boolean(category.is_income)}`
 
+const PROFILE_COLS = "id,user_id,display_name,currency,seeded_at,created_at,updated_at,monthly_income_target,locale,timezone,two_factor_enabled,notification_email,notification_push,notification_sms,phone_number,is_banned"
+
 async function ensureProfile(user) {
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("*")
+    .select(PROFILE_COLS)
     .eq("user_id", user.id)
     .maybeSingle()
 
@@ -687,7 +689,7 @@ export async function loadBudgetData(user) {
       .order("created_at", { ascending: false }),
     supabase
       .from("profiles")
-      .select("*")
+      .select(PROFILE_COLS)
       .eq("user_id", user.id)
       .single(),
     supabase
@@ -1058,7 +1060,7 @@ export async function updateProfile(userId, values) {
     .from("profiles")
     .update(values)
     .eq("user_id", userId)
-    .select()
+    .select(PROFILE_COLS)
     .single()
 
   if (error && isSchemaMissing(error)) {
@@ -1071,7 +1073,7 @@ export async function updateProfile(userId, values) {
       .from("profiles")
       .update(fallbackValues)
       .eq("user_id", userId)
-      .select()
+      .select(PROFILE_COLS)
       .single()
     data = fallback.data
     error = fallback.error

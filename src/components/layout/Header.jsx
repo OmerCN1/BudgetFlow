@@ -2,7 +2,7 @@ import { useState } from "react"
 import { S, FONT_BODY, btnPrimary } from "../../constants/theme"
 import { TRY } from "../../utils/helpers"
 
-export default function Header({ view, setView, balance, notificationCount = 0, onAddTx, user, disabled, theme, toggleTheme }) {
+export default function Header({ view, setView, balance, notificationCount = 0, onAddTx, user, isAdmin, disabled, theme, toggleTheme }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const displayName = user?.user_metadata?.display_name || user?.user_metadata?.full_name || "Hesabım"
   const initials = displayName
@@ -27,6 +27,7 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
     { id: "subscriptions", label: "Abonelikler", icon: "subscriptions", group: "Yönetim" },
     { id: "categories",    label: "Kategoriler", icon: "categories",    group: "Yönetim" },
     { id: "currency",      label: "Döviz",       icon: "currency",      group: "Yönetim" },
+    ...(isAdmin ? [{ id: "admin", label: "Admin", icon: "shield", group: "Admin" }] : []),
   ]
 
   const navigate = (nextView) => {
@@ -329,6 +330,12 @@ function NavIcon({ name }) {
         <rect x="3" y="6" width="18" height="13" rx="2.5" />
         <path d="M3 10h18" />
         <path d="M7 14h3M15 14h2" />
+      </>
+    ),
+    shield: (
+      <>
+        <path d="M12 3L4 7v5c0 5.25 3.5 10.15 8 11.35C16.5 22.15 20 17.25 20 12V7L12 3Z" />
+        <path d="M9 12l2 2 4-4" />
       </>
     ),
   }

@@ -22,6 +22,7 @@ import CurrencyRates from "./components/currency/CurrencyRates"
 import Assets from "./components/assets/Assets"
 import CreditCards from "./components/creditcards/CreditCards"
 import Card from "./components/ui/Card"
+import AdminPanel from "./components/admin/AdminPanel"
 
 import { useAuth } from "./hooks/useAuth"
 import {
@@ -61,7 +62,7 @@ import { extractReceiptFieldsFromText, suggestCategory } from "./utils/categoryS
 import { useTheme } from "./hooks/useTheme"
 
 export default function App() {
-  const { user, loading: authLoading, isConfigured } = useAuth()
+  const { user, loading: authLoading, isAdmin, isBanned, isConfigured } = useAuth()
   const userId = user?.id || null
   const { theme, toggleTheme } = useTheme()
 
@@ -171,11 +172,7 @@ export default function App() {
       .catch((err) => {
         if (refreshSeqRef.current !== requestSeq) return
         const message = err.message || "Veriler yüklenirken bir hata oluştu."
-        setError(
-          message.includes("schema cache") || message.includes("relation")
-            ? "Supabase tabloları güncel değil. Supabase SQL Editor'da supabase/schema.sql dosyasını tekrar çalıştırın, sonra sayfayı yenileyin."
-            : message
-        )
+        setError(message)
       })
       .finally(() => {
         if (refreshSeqRef.current === requestSeq) {
@@ -893,6 +890,15 @@ export default function App() {
     return <ShellMessage title="Oturum kontrol ediliyor" text="BudgetFlow hazırlanıyor..." />
   }
 
+  if (isBanned) {
+    return (
+      <ShellMessage
+        title="Hesabınız askıya alındı"
+        text="Hesabınız bir yönetici tarafından askıya alınmıştır. Detaylı bilgi için destek ekibiyle iletişime geçin."
+      />
+    )
+  }
+
   if (!user) {
     const openPublicPage = (nextView) => setPublicView(nextView)
     const openAuth = (mode) => {
@@ -932,6 +938,17 @@ export default function App() {
     )
   }
 
+  if (view === "admin") {
+    return (
+      <AdminPanel
+        user={user}
+        isAdmin={isAdmin}
+        loading={authLoading}
+        setView={setView}
+      />
+    )
+  }
+
   return (
     <div className="app-shell" style={{ fontFamily: FONT_BODY }}>
       <Header
@@ -941,6 +958,7 @@ export default function App() {
         notificationCount={notificationCount}
         onAddTx={openAddTx}
         user={user}
+        isAdmin={isAdmin}
         disabled={actionLoading || activeCats.length === 0}
         theme={theme}
         toggleTheme={toggleTheme}
