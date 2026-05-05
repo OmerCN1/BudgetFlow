@@ -58,7 +58,7 @@ export default function SubscriptionPlans({ currentPlan = "premium", onBackAccou
       <section className="plans-hero">
         <button type="button" onClick={onBackAccount} style={btnGhost}>← Profil'e Dön</button>
         <div>
-          <span>BudgetFlow Plans</span>
+          <span>BudgetAssist Plans</span>
           <h1>Planınızı Seçin</h1>
           <p>Size en uygun bütçe yönetimi deneyimini seçin. Sessiz lüksün ve mutlak kontrolün finansal dünyasına adım atın.</p>
         </div>

@@ -2,12 +2,23 @@ import Card from "../ui/Card"
 import EmptyState from "../ui/EmptyState"
 import FieldLabel from "../ui/FieldLabel"
 import { S, FONT_MONO, btnGhost } from "../../constants/theme"
-import { TRY } from "../../utils/helpers"
-import { currentMonthKey, transactionsForMonth, totalsFor } from "../../utils/finance"
+import { buildNotifications } from "../../utils/notifications"
 
-export default function Notifications({ txs, cats, goals, recurringRules, setView }) {
-  const items = buildNotifications({ txs, cats, goals, recurringRules })
-  const unreadCount = items.filter((item) => item.severity !== "info").length
+export default function Notifications({
+  txs,
+  cats,
+  goals,
+  recurringRules,
+  storedNotifications = [],
+  onMarkRead,
+  setView,
+}) {
+  const budgetItems = buildNotifications({ txs, cats, goals, recurringRules })
+  const storedItems = storedNotifications.map(toStoredNotificationItem)
+  const items = [...storedItems, ...budgetItems]
+  const unreadCount =
+    storedNotifications.filter((item) => !item.isRead).length +
+    budgetItems.filter((item) => item.severity !== "info").length
 
   return (
     <div className="page-root">
@@ -15,10 +26,10 @@ export default function Notifications({ txs, cats, goals, recurringRules, setVie
         <div>
           <span className="page-kicker">Merkez</span>
           <h1 className="page-title">Bildirim Merkezi</h1>
-          <p className="page-subtitle">Bütçe riskleri, yaklaşan abonelikler ve hedef ilerlemeleri burada toplanır.</p>
+          <p className="page-subtitle">Yönetici duyuruları, bütçe riskleri, yaklaşan abonelikler ve hedef ilerlemeleri burada toplanır.</p>
         </div>
         <div className="page-header-actions">
-          <span className="notification-count-badge">{unreadCount} kritik uyarı</span>
+          <span className="notification-count-badge">{unreadCount} okunmamış / kritik</span>
         </div>
       </div>
 
@@ -53,7 +64,11 @@ export default function Notifications({ txs, cats, goals, recurringRules, setVie
                   <div style={{ color: S.text, fontWeight: 800 }}>{item.title}</div>
                   <div style={{ color: S.sub, fontSize: 13, marginTop: 4 }}>{item.body}</div>
                 </div>
-                {item.value && (
+                {item.isStored && !item.isRead && onMarkRead ? (
+                  <button onClick={() => onMarkRead(item.notificationId)} style={{ ...btnGhost, padding: "7px 10px", fontSize: 11 }}>
+                    Okundu
+                  </button>
+                ) : item.value && (
                   <div className="finance-number" style={{ color: toneColor(item.severity), fontFamily: FONT_MONO, fontWeight: 800 }}>
                     {item.value}
                   </div>
@@ -76,88 +91,18 @@ export default function Notifications({ txs, cats, goals, recurringRules, setVie
   )
 }
 
-export function buildNotifications({ txs, cats, goals, recurringRules }) {
-  const monthTxs = transactionsForMonth(txs, currentMonthKey())
-  const totals = totalsFor(monthTxs)
-  const items = []
-
-  if (totals.net < 0) {
-    items.push({
-      id: "negative-net",
-      severity: "danger",
-      icon: "!",
-      title: "Nakit akışı negatif",
-      body: "Bu ay giderler gelirleri aşıyor. Değişken harcamaları kontrol etmek iyi olur.",
-      value: TRY(totals.net),
-    })
+function toStoredNotificationItem(notification) {
+  return {
+    id: `stored-${notification.id}`,
+    notificationId: notification.id,
+    isStored: true,
+    isRead: notification.isRead,
+    severity: storedSeverity(notification.type),
+    icon: notification.isRead ? "✓" : "•",
+    title: notification.title,
+    body: notification.message,
+    value: formatNotificationDate(notification.createdAt),
   }
-
-  cats
-    .filter((cat) => !cat.isIncome && !cat.isArchived && cat.budget > 0)
-    .forEach((cat) => {
-      const spent = monthTxs
-        .filter((tx) => tx.type === "expense" && tx.cat === cat.id)
-        .reduce((total, tx) => total + tx.amount, 0)
-      const pct = (spent / cat.budget) * 100
-      if (pct >= 80) {
-        items.push({
-          id: `budget-${cat.id}`,
-          severity: pct >= 100 ? "danger" : "warning",
-          icon: "△",
-          title: `${cat.name} bütçesi ${pct >= 100 ? "aşıldı" : "yaklaştı"}`,
-          body: `${TRY(spent)} / ${TRY(cat.budget)} kullanıldı.`,
-          value: `%${Math.round(pct)}`,
-        })
-      }
-    })
-
-  recurringRules
-    .filter((rule) => rule.isActive)
-    .forEach((rule) => {
-      const days = daysUntil(rule.nextDate)
-      if (days >= 0 && days <= 7) {
-        items.push({
-          id: `recurring-${rule.id}`,
-          severity: days <= 2 ? "warning" : "info",
-          icon: "↻",
-          title: `${rule.name} yaklaşıyor`,
-          body: days === 0 ? "Bugün planlandı." : `${days} gün sonra planlandı.`,
-          value: `${rule.type === "income" ? "+" : "-"}${TRY(rule.amount)}`,
-        })
-      }
-    })
-
-  goals
-    .filter((goal) => !goal.isArchived && goal.targetAmount > 0)
-    .forEach((goal) => {
-      const pct = (goal.currentAmount / goal.targetAmount) * 100
-      if (pct >= 90 && pct < 100) {
-        items.push({
-          id: `goal-${goal.id}`,
-          severity: "success",
-          icon: "◎",
-          title: `${goal.name} hedefi bitişe yakın`,
-          body: "Son katkılarla hedef neredeyse tamamlandı.",
-          value: `%${Math.round(pct)}`,
-        })
-      }
-    })
-
-  return items.sort((a, b) => severityRank(b.severity) - severityRank(a.severity)).slice(0, 12)
-}
-
-function daysUntil(dateString) {
-  const today = new Date()
-  const target = new Date(`${dateString}T12:00:00`)
-  today.setHours(12, 0, 0, 0)
-  return Math.ceil((target.getTime() - today.getTime()) / 86400000)
-}
-
-function severityRank(severity) {
-  if (severity === "danger") return 3
-  if (severity === "warning") return 2
-  if (severity === "success") return 1
-  return 0
 }
 
 function toneColor(severity) {
@@ -165,4 +110,18 @@ function toneColor(severity) {
   if (severity === "warning") return S.amber
   if (severity === "success") return S.green
   return S.cyan
+}
+
+function storedSeverity(type) {
+  if (type === "alert") return "warning"
+  if (type === "broadcast") return "info"
+  return "success"
+}
+
+function formatNotificationDate(value) {
+  if (!value) return ""
+  return new Date(value).toLocaleDateString("tr-TR", {
+    day: "2-digit",
+    month: "short",
+  })
 }

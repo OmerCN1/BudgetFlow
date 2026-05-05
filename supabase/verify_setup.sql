@@ -12,7 +12,15 @@ where table_schema = 'public'
     'recurring_rules',
     'ai_conversations',
     'ai_messages',
-    'ai_insights'
+    'ai_insights',
+    'receipts',
+    'debts',
+    'debt_payments',
+    'assets',
+    'credit_cards',
+    'notification_logs',
+    'notifications',
+    'admin_logs'
   )
 order by table_name;
 
@@ -31,7 +39,30 @@ where schemaname = 'public'
     'recurring_rules',
     'ai_conversations',
     'ai_messages',
-    'ai_insights'
+    'ai_insights',
+    'receipts',
+    'debts',
+    'debt_payments',
+    'assets',
+    'credit_cards',
+    'notification_logs',
+    'notifications',
+    'admin_logs'
   )
 order by tablename, policyname;
 
+select
+  routine_name,
+  routine_type
+from information_schema.routines
+where specific_schema = 'public'
+  and routine_name in (
+    'is_admin',
+    'protect_profile_admin_fields',
+    'mark_notification_read',
+    'get_all_user_profiles',
+    'set_user_role',
+    'set_user_banned',
+    'add_goal_contribution'
+  )
+order by routine_name;

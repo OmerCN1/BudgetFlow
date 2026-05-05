@@ -5,7 +5,7 @@ import FieldLabel from "../ui/FieldLabel"
 import { supabase } from "../../lib/supabase"
 import { S, FONT_BODY, FONT_MONO, inputStyle, btnGhost, btnPrimary } from "../../constants/theme"
 import { TRY } from "../../utils/helpers"
-import { sendNotification, loadNotificationLogs } from "../../services/budgetService"
+import { sendNotification, loadNotificationLogs } from "../../services/notificationService"
 
 const compactDateTime = (dateValue) =>
   dateValue
@@ -17,7 +17,7 @@ const compactDateTime = (dateValue) =>
     : "Henüz yok"
 
 const initialsFor = (name, email) =>
-  (name || email || "BF")
+  (name || email || "BA")
     .split(/[.\s_-]+/)
     .filter(Boolean)
     .slice(0, 2)
@@ -26,7 +26,7 @@ const initialsFor = (name, email) =>
     .toUpperCase()
 
 export default function Account({ user, profile, txs, cats, balance, onProfileUpdate, onOpenPlans }) {
-  const fallbackName = user?.email?.split("@")[0] || "BudgetFlow"
+  const fallbackName = user?.email?.split("@")[0] || "BudgetAssist"
   const [displayName, setDisplayName] = useState(profile?.display_name || fallbackName)
   const [monthlyIncomeTarget, setMonthlyIncomeTarget] = useState(profile?.monthly_income_target || "")
   const [currency, setCurrency] = useState(profile?.currency || "TRY")
@@ -61,7 +61,7 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
   const expense = useMemo(() => txs.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0), [txs])
   const expenseRatio = income > 0 ? Math.min((expense / income) * 100, 100) : 0
   const activeCategories = cats.filter((cat) => !cat.isArchived)
-  const customerNo = `BF-${String(user?.id || "000000").replace(/\D/g, "").slice(0, 6).padEnd(6, "0")}`
+  const customerNo = `BA-${String(user?.id || "000000").replace(/\D/g, "").slice(0, 6).padEnd(6, "0")}`
   const accountAge = profile?.created_at ? compactDateTime(profile.created_at) : "Yeni hesap"
   const initials = initialsFor(displayName, user?.email)
 
@@ -132,7 +132,7 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = "budgetflow-islemler.csv"
+    link.download = "budgetassist-islemler.csv"
     link.click()
     URL.revokeObjectURL(url)
   }
@@ -225,7 +225,7 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
             <FieldLabel>Son Giriş Hareketleri</FieldLabel>
             <div className="account-login-list">
               <LoginRow device="macOS Sonoma • Chrome" meta="Bugün • İstanbul, TR" />
-              <LoginRow device="Mobil tarayıcı • BudgetFlow" meta="Dün • İstanbul, TR" />
+              <LoginRow device="Mobil tarayıcı • BudgetAssist" meta="Dün • İstanbul, TR" />
             </div>
           </Card>
 
@@ -258,7 +258,7 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
             <div className="account-plan-card">
               <small>Aktif Plan</small>
               <strong>Premium</strong>
-              <span>BudgetFlow Private</span>
+              <span>BudgetAssist Private</span>
             </div>
             <div className="account-meta-list">
               <MetaRow label="Bir sonraki ödeme" value="12 Haziran 2026" />

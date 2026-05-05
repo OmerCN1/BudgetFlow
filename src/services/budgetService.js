@@ -168,9 +168,12 @@ const isSchemaMissing = (error) => {
     message.includes("column") ||
     error?.code === "42P01" ||
     error?.code === "42703" ||
-    error?.code === "PGRST204"
+    error?.code === "PGRST204" ||
+    error?.code === "PGRST202"
   )
 }
+
+const isUniqueViolation = (error) => error?.code === "23505"
 
 const optionalRows = (result) => {
   if (!result.error) return result.data || []
@@ -232,7 +235,7 @@ async function ensureProfile(user) {
   if (error) throw error
   if (profile) return profile
 
-  const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "BudgetFlow"
+  const displayName = user.user_metadata?.display_name || user.email?.split("@")[0] || "BudgetAssist"
   const { data, error: insertError } = await supabase
     .from("profiles")
     .insert({
@@ -626,8 +629,11 @@ async function materializeDueRecurringRules(userId, recurringRows, transactionRo
           recurring_rule_id: row.id,
         }
         const { data, error } = await supabase.from("transactions").insert(payload).select().single()
-        if (error) throw error
-        createdRows.push(data)
+        if (error) {
+          if (!isUniqueViolation(error)) throw error
+        } else {
+          createdRows.push(data)
+        }
         existingKeys.add(key)
       }
       nextDate = advanceRecurringDate(nextDate, row.frequency)
@@ -1112,7 +1118,18 @@ export async function addGoalContribution(userId, contribution) {
   if (!contribution.goalId) throw new Error("goalId gerekli")
   const amount = Number(contribution.amount)
   if (!isFinite(amount) || amount <= 0) throw new Error("Katkı tutarı sıfırdan büyük olmalıdır")
-  const { data, error } = await supabase
+
+  let { data, error } = await supabase.rpc("add_goal_contribution", {
+    p_goal_id: contribution.goalId,
+    p_amount: amount,
+    p_contribution_date: contribution.date,
+    p_note: contribution.note || null,
+  })
+
+  if (!error) return toContribution(data)
+  if (!isSchemaMissing(error)) throw error
+
+  const fallback = await supabase
     .from("goal_contributions")
     .insert({
       user_id: userId,
@@ -1124,6 +1141,8 @@ export async function addGoalContribution(userId, contribution) {
     .select()
     .single()
 
+  data = fallback.data
+  error = fallback.error
   if (error) throw error
 
   const { data: goal } = await supabase
@@ -1133,12 +1152,13 @@ export async function addGoalContribution(userId, contribution) {
     .eq("user_id", userId)
     .single()
 
-  await supabase
+  const update = await supabase
     .from("goals")
-    .update({ current_amount: Number(goal?.current_amount || 0) + contribution.amount })
+    .update({ current_amount: Number(goal?.current_amount || 0) + amount })
     .eq("id", contribution.goalId)
     .eq("user_id", userId)
 
+  if (update.error) throw update.error
   return toContribution(data)
 }
 
@@ -1454,25 +1474,6 @@ export async function addDebtPayment(userId, payment) {
   return toDebtPayment(data)
 }
 
-export async function sendNotification(userId, type = "alert") {
-  const { data, error } = await supabase.functions.invoke("send-notifications", {
-    body: { user_id: userId, type },
-  })
-  if (error) throw error
-  return data
-}
-
-export async function loadNotificationLogs(userId) {
-  const { data, error } = await supabase
-    .from("notification_logs")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(20)
-  if (error) throw error
-  return data || []
-}
-
 function buildLocalCoachResponse(message, summary) {
   const totals = summary?.totals || { income: 0, expense: 0, net: 0 }
   const previous = summary?.previousMonthTotals || { expense: 0 }
@@ -1564,21 +1565,23 @@ export async function loadCreditCards(userId) {
 export async function saveCreditCard(userId, card, editId) {
   const payload = fromCreditCard(card, userId)
   if (editId) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('credit_cards')
       .update({ ...payload, updated_at: new Date().toISOString() })
       .eq('id', editId)
       .eq('user_id', userId)
+      .select()
+      .single()
     if (error) throw error
-    return editId
+    return toCreditCard(data)
   }
   const { data, error } = await supabase
     .from('credit_cards')
     .insert(payload)
-    .select('id')
+    .select()
     .single()
   if (error) throw error
-  return data.id
+  return toCreditCard(data)
 }
 
 export async function deleteCreditCard(userId, cardId) {

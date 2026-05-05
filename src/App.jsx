@@ -1,28 +1,7 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from "react"
+import { lazy, Suspense, useState, useMemo, useEffect, useCallback, useRef } from "react"
 
 import Header from "./components/layout/Header"
-import Dashboard from "./components/dashboard/Dashboard"
-import Transactions from "./components/transactions/Transactions"
-import Categories from "./components/categories/Categories"
-import Goals from "./components/goals/Goals"
-import Reports from "./components/reports/Reports"
-import BudgetCalendar from "./components/calendar/BudgetCalendar"
-import Receipts from "./components/receipts/Receipts"
-import SubscriptionPlans from "./components/plans/SubscriptionPlans"
-import AICoach from "./components/coach/AICoach"
-import RecurringRules from "./components/recurring/RecurringRules"
-import Notifications, { buildNotifications } from "./components/notifications/Notifications"
-import Subscriptions from "./components/subscriptions/Subscriptions"
-import AuthScreen from "./components/auth/AuthScreen"
-import LandingPage from "./components/auth/LandingPage"
-import PublicInfoPage from "./components/auth/PublicInfoPage"
-import Account from "./components/account/Account"
-import DebtTracker from "./components/debts/DebtTracker"
-import CurrencyRates from "./components/currency/CurrencyRates"
-import Assets from "./components/assets/Assets"
-import CreditCards from "./components/creditcards/CreditCards"
 import Card from "./components/ui/Card"
-import AdminPanel from "./components/admin/AdminPanel"
 
 import { useAuth } from "./hooks/useAuth"
 import {
@@ -56,10 +35,34 @@ import {
   deleteCreditCard,
 } from "./services/budgetService"
 import { loadAssets, saveAsset, deleteAsset } from "./services/assetService"
+import { loadStoredNotifications, markStoredNotificationRead } from "./services/notificationService"
 import { PALETTE, FONT_BODY, S, btnPrimary } from "./constants/theme"
 import { today, sum } from "./utils/helpers"
 import { extractReceiptFieldsFromText, suggestCategory } from "./utils/categorySuggestions"
+import { buildNotifications } from "./utils/notifications"
 import { useTheme } from "./hooks/useTheme"
+
+const Dashboard = lazy(() => import("./components/dashboard/Dashboard"))
+const Transactions = lazy(() => import("./components/transactions/Transactions"))
+const Categories = lazy(() => import("./components/categories/Categories"))
+const Goals = lazy(() => import("./components/goals/Goals"))
+const Reports = lazy(() => import("./components/reports/Reports"))
+const BudgetCalendar = lazy(() => import("./components/calendar/BudgetCalendar"))
+const Receipts = lazy(() => import("./components/receipts/Receipts"))
+const SubscriptionPlans = lazy(() => import("./components/plans/SubscriptionPlans"))
+const AICoach = lazy(() => import("./components/coach/AICoach"))
+const RecurringRules = lazy(() => import("./components/recurring/RecurringRules"))
+const Notifications = lazy(() => import("./components/notifications/Notifications"))
+const Subscriptions = lazy(() => import("./components/subscriptions/Subscriptions"))
+const AuthScreen = lazy(() => import("./components/auth/AuthScreen"))
+const LandingPage = lazy(() => import("./components/auth/LandingPage"))
+const PublicInfoPage = lazy(() => import("./components/auth/PublicInfoPage"))
+const Account = lazy(() => import("./components/account/Account"))
+const DebtTracker = lazy(() => import("./components/debts/DebtTracker"))
+const CurrencyRates = lazy(() => import("./components/currency/CurrencyRates"))
+const Assets = lazy(() => import("./components/assets/Assets"))
+const CreditCards = lazy(() => import("./components/creditcards/CreditCards"))
+const AdminPanel = lazy(() => import("./components/admin/AdminPanel"))
 
 export default function App() {
   const { user, loading: authLoading, isAdmin, isBanned, isConfigured } = useAuth()
@@ -80,6 +83,7 @@ export default function App() {
   const [debtPayments, setDebtPayments] = useState([])
   const [assets, setAssets] = useState([])
   const [creditCards, setCreditCards] = useState([])
+  const [storedNotifications, setStoredNotifications] = useState([])
   const [view, setView] = useState("dashboard")
   const [dataLoading, setDataLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
@@ -144,8 +148,14 @@ export default function App() {
     setDataLoading(true)
     setError("")
 
-    const refreshPromise = loadBudgetData(user)
-      .then((data) => {
+    const refreshPromise = Promise.all([
+      loadBudgetData(user),
+      loadDebts(user.id).catch(() => ({ debts: [], debtPayments: [] })),
+      loadAssets(user.id).catch(() => []),
+      loadCreditCards(user.id).catch(() => []),
+      loadStoredNotifications(user.id).catch(() => []),
+    ])
+      .then(([data, debtData, assetRows, creditCardRows, notificationRows]) => {
         if (refreshSeqRef.current !== requestSeq) return
         setProfile(data.profile)
         setCats(data.cats)
@@ -155,19 +165,12 @@ export default function App() {
         setRecurringRules(data.recurringRules)
         setReceipts(data.receipts || [])
         setAiInsights(data.aiInsights)
+        setDebts(debtData.debts)
+        setDebtPayments(debtData.debtPayments)
+        setAssets(assetRows)
+        setCreditCards(creditCardRows)
+        setStoredNotifications(notificationRows)
         setHasLoadedData(true)
-        loadDebts(user.id)
-          .then(({ debts: d, debtPayments: dp }) => {
-            setDebts(d)
-            setDebtPayments(dp)
-          })
-          .catch(() => {})
-        loadAssets(user.id)
-          .then((data) => setAssets(data))
-          .catch(() => {})
-        loadCreditCards(user.id)
-          .then((data) => setCreditCards(data))
-          .catch(() => {})
       })
       .catch((err) => {
         if (refreshSeqRef.current !== requestSeq) return
@@ -183,7 +186,7 @@ export default function App() {
 
     refreshPromiseRef.current = refreshPromise
     return refreshPromise
-  }, [userId])
+  }, [user])
 
   useEffect(() => {
     setAiMessages([])
@@ -206,6 +209,7 @@ export default function App() {
       setDebtPayments([])
       setAssets([])
       setCreditCards([])
+      setStoredNotifications([])
       setHasLoadedData(false)
       setDataLoading(false)
       setView("dashboard")
@@ -220,8 +224,10 @@ export default function App() {
   const totalExpense = useMemo(() => sum(txs.filter((t) => t.type === "expense")), [txs])
   const balance = totalIncome - totalExpense
   const notificationCount = useMemo(
-    () => buildNotifications({ txs, cats, goals, recurringRules }).filter((item) => item.severity !== "info").length,
-    [txs, cats, goals, recurringRules]
+    () =>
+      buildNotifications({ txs, cats, goals, recurringRules }).filter((item) => item.severity !== "info").length +
+      storedNotifications.filter((item) => !item.isRead).length,
+    [txs, cats, goals, recurringRules, storedNotifications]
   )
 
   const catSpend = useMemo(() => {
@@ -661,8 +667,7 @@ export default function App() {
   const handleSaveCreditCard = async (card, editId) => {
     setActionLoading(true)
     try {
-      const id = await saveCreditCard(user.id, card, editId)
-      const saved = { ...card, id }
+      const saved = await saveCreditCard(user.id, card, editId)
       setCreditCards((prev) =>
         editId ? prev.map((c) => c.id === editId ? saved : c) : [...prev, saved]
       )
@@ -774,6 +779,16 @@ export default function App() {
     setCurrentAiConversationId(null)
   }
 
+  const handleMarkNotificationRead = async (id) => {
+    if (!user?.id) return
+    try {
+      const saved = await markStoredNotificationRead(user.id, id)
+      setStoredNotifications((prev) => prev.map((item) => item.id === id ? saved : item))
+    } catch (err) {
+      showError(err.message || "Bildirim güncellenemedi.")
+    }
+  }
+
   const exportCSV = () => {
     const escapeCell = (value) => `"${String(value).replaceAll('"', '""')}"`
     const filtered = txs.filter((t) => {
@@ -805,7 +820,7 @@ export default function App() {
     const blob = new Blob(["\uFEFF" + [header, ...rows].join("\n")], { type: "text/csv;charset=utf-8;" })
     const a = document.createElement("a")
     a.href = URL.createObjectURL(blob)
-    a.download = "budgetflow.csv"
+    a.download = "budgetassist.csv"
     a.click()
     URL.revokeObjectURL(a.href)
   }
@@ -887,7 +902,7 @@ export default function App() {
   }
 
   if (authLoading) {
-    return <ShellMessage title="Oturum kontrol ediliyor" text="BudgetFlow hazırlanıyor..." />
+    return <ShellMessage title="Oturum kontrol ediliyor" text="BudgetAssist hazırlanıyor..." />
   }
 
   if (isBanned) {
@@ -908,44 +923,52 @@ export default function App() {
 
     if (publicView === "auth") {
       return (
-        <AuthScreen
-          isConfigured={isConfigured}
-          initialMode={authMode}
-          onBackLanding={() => setPublicView("landing")}
-          onOpenPage={openPublicPage}
-        />
+        <Suspense fallback={<ShellMessage title="Ekran yükleniyor" text="Giriş ekranı hazırlanıyor." />}>
+          <AuthScreen
+            isConfigured={isConfigured}
+            initialMode={authMode}
+            onBackLanding={() => setPublicView("landing")}
+            onOpenPage={openPublicPage}
+          />
+        </Suspense>
       )
     }
 
     if (["privacy", "terms", "security", "contact"].includes(publicView)) {
       return (
-        <PublicInfoPage
-          page={publicView}
-          onBackLanding={() => setPublicView("landing")}
-          onLogin={() => openAuth("login")}
-          onSignup={() => openAuth("signup")}
-          onOpenPage={openPublicPage}
-        />
+        <Suspense fallback={<ShellMessage title="Sayfa yükleniyor" text="Bilgi sayfası hazırlanıyor." />}>
+          <PublicInfoPage
+            page={publicView}
+            onBackLanding={() => setPublicView("landing")}
+            onLogin={() => openAuth("login")}
+            onSignup={() => openAuth("signup")}
+            onOpenPage={openPublicPage}
+          />
+        </Suspense>
       )
     }
 
     return (
-      <LandingPage
-        onLogin={() => openAuth("login")}
-        onSignup={() => openAuth("signup")}
-        onOpenPage={openPublicPage}
-      />
+      <Suspense fallback={<ShellMessage title="BudgetAssist" text="Ana sayfa hazırlanıyor." />}>
+        <LandingPage
+          onLogin={() => openAuth("login")}
+          onSignup={() => openAuth("signup")}
+          onOpenPage={openPublicPage}
+        />
+      </Suspense>
     )
   }
 
   if (view === "admin") {
     return (
-      <AdminPanel
-        user={user}
-        isAdmin={isAdmin}
-        loading={authLoading}
-        setView={setView}
-      />
+      <Suspense fallback={<ShellMessage title="Admin Console" text="Panel yükleniyor." />}>
+        <AdminPanel
+          user={user}
+          isAdmin={isAdmin}
+          loading={authLoading}
+          setView={setView}
+        />
+      </Suspense>
     )
   }
 
@@ -974,13 +997,22 @@ export default function App() {
             </div>
           )}
 
-          {dataLoading && !hasLoadedData ? (
-            <ShellMessage compact title="Veriler yükleniyor" text="Hesabınıza ait kayıtlar hazırlanıyor." />
-          ) : (
-            <>
+          <Suspense fallback={<ShellMessage compact title="Ekran yükleniyor" text="Bölüm hazırlanıyor." />}>
+            {dataLoading && !hasLoadedData ? (
+              <ShellMessage compact title="Veriler yükleniyor" text="Hesabınıza ait kayıtlar hazırlanıyor." />
+            ) : (
+              <>
               {view === "dashboard" && <Dashboard txs={txs} cats={cats} catById={catById} setView={setView} />}
               {view === "notifications" && (
-                <Notifications txs={txs} cats={cats} goals={goals} recurringRules={recurringRules} setView={setView} />
+                <Notifications
+                  txs={txs}
+                  cats={cats}
+                  goals={goals}
+                  recurringRules={recurringRules}
+                  storedNotifications={storedNotifications}
+                  onMarkRead={handleMarkNotificationRead}
+                  setView={setView}
+                />
               )}
               {view === "reports" && <Reports txs={txs} cats={cats} />}
               {view === "receipts" && (
@@ -1115,8 +1147,9 @@ export default function App() {
                   onOpenPlans={() => setView("plans")}
                 />
               )}
-            </>
-          )}
+              </>
+            )}
+          </Suspense>
         </div>
       </main>
     </div>

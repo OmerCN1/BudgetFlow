@@ -139,28 +139,28 @@ export async function writeAuditLog(adminId, action, targetUserId = null, detail
 
 export async function updateUserRole(adminId, targetUserId, newRole) {
   await writeAuditLog(adminId, "change_role", targetUserId, { new_role: newRole })
-  const { error } = await supabase
-    .from("profiles")
-    .update({ role: newRole })
-    .eq("user_id", targetUserId)
+  const { error } = await supabase.rpc("set_user_role", {
+    target_user_id: targetUserId,
+    new_role: newRole,
+  })
   if (error) throw error
 }
 
 export async function banUser(adminId, targetUserId) {
   await writeAuditLog(adminId, "ban_user", targetUserId, null)
-  const { error } = await supabase
-    .from("profiles")
-    .update({ is_banned: true })
-    .eq("user_id", targetUserId)
+  const { error } = await supabase.rpc("set_user_banned", {
+    target_user_id: targetUserId,
+    next_is_banned: true,
+  })
   if (error) throw error
 }
 
 export async function unbanUser(adminId, targetUserId) {
   await writeAuditLog(adminId, "unban_user", targetUserId, null)
-  const { error } = await supabase
-    .from("profiles")
-    .update({ is_banned: false })
-    .eq("user_id", targetUserId)
+  const { error } = await supabase.rpc("set_user_banned", {
+    target_user_id: targetUserId,
+    next_is_banned: false,
+  })
   if (error) throw error
 }
 
@@ -168,13 +168,15 @@ export async function sendBroadcastNotification(adminId, { title, message, type 
   const { data: users, error: usersErr } = await supabase.rpc("get_all_user_profiles")
   if (usersErr) throw usersErr
 
-  const rows = (users || []).map((u) => ({
-    user_id: u.user_id,
-    type,
-    title,
-    message,
-    is_read: false,
-  }))
+  const rows = (users || [])
+    .filter((u) => !u.is_banned)
+    .map((u) => ({
+      user_id: u.user_id,
+      type,
+      title,
+      message,
+      is_read: false,
+    }))
 
   if (rows.length === 0) return 0
 

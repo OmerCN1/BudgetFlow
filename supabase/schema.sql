@@ -55,10 +55,25 @@ create table if not exists public.notification_logs (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  type text not null default 'broadcast',
+  title text not null,
+  message text not null,
+  is_read boolean not null default false,
+  read_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists notification_logs_user_id_idx on public.notification_logs(user_id);
 create index if not exists notification_logs_created_at_idx on public.notification_logs(created_at);
+create index if not exists notifications_user_id_idx on public.notifications(user_id);
+create index if not exists notifications_user_unread_idx on public.notifications(user_id, is_read);
+create index if not exists notifications_created_at_idx on public.notifications(created_at);
 
 alter table public.notification_logs enable row level security;
+alter table public.notifications enable row level security;
 
 drop policy if exists "Users can read own notification logs" on public.notification_logs;
 create policy "Users can read own notification logs"
@@ -73,6 +88,46 @@ on public.notification_logs
 for insert
 to service_role
 with check (true);
+
+drop policy if exists "Users can read own notifications" on public.notifications;
+create policy "Users can read own notifications"
+on public.notifications
+for select
+to authenticated
+using ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can update own notifications" on public.notifications;
+
+create or replace function public.mark_notification_read(p_notification_id uuid)
+returns public.notifications
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_row public.notifications;
+begin
+  if v_user_id is null then
+    raise exception 'Authentication required';
+  end if;
+
+  update public.notifications
+  set is_read = true,
+      read_at = coalesce(read_at, now())
+  where id = p_notification_id
+    and user_id = v_user_id
+  returning * into v_row;
+
+  if not found then
+    raise exception 'Notification not found';
+  end if;
+
+  return v_row;
+end;
+$$;
+
+grant execute on function public.mark_notification_read(uuid) to authenticated;
 
 alter table public.categories
   add column if not exists icon text not null default 'Gider',
@@ -177,6 +232,24 @@ create unique index if not exists categories_user_name_type_active_uidx
   where is_archived = false;
 create index if not exists transactions_user_id_idx on public.transactions(user_id);
 create index if not exists transactions_category_id_idx on public.transactions(category_id);
+create unique index if not exists transactions_recurring_rule_date_uidx
+  on public.transactions(user_id, recurring_rule_id, transaction_date)
+  where recurring_rule_id is not null;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'transactions_recurring_rule_id_fkey'
+      and conrelid = 'public.transactions'::regclass
+  ) then
+    alter table public.transactions
+      add constraint transactions_recurring_rule_id_fkey
+      foreign key (recurring_rule_id)
+      references public.recurring_rules(id)
+      on delete set null;
+  end if;
+end $$;
 create index if not exists goals_user_id_idx on public.goals(user_id);
 create index if not exists goal_contributions_user_id_idx on public.goal_contributions(user_id);
 create index if not exists recurring_rules_user_id_idx on public.recurring_rules(user_id);
@@ -450,6 +523,48 @@ alter table public.profiles
 
 create index if not exists profiles_role_idx on public.profiles(role);
 
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where user_id = auth.uid()
+      and role = 'admin'
+      and is_banned = false
+  );
+$$;
+
+grant execute on function public.is_admin() to authenticated;
+
+create or replace function public.protect_profile_admin_fields()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if (
+    old.role is distinct from new.role
+    or old.is_banned is distinct from new.is_banned
+  ) and not (select public.is_admin()) then
+    raise exception 'Protected profile fields cannot be updated by this user';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_profile_admin_fields_trigger on public.profiles;
+create trigger protect_profile_admin_fields_trigger
+before update on public.profiles
+for each row
+execute function public.protect_profile_admin_fields();
+
 -- 2. admin_logs tablosu
 create table if not exists public.admin_logs (
   id uuid primary key default gen_random_uuid(),
@@ -470,12 +585,7 @@ create policy "Admins can read audit logs"
 on public.admin_logs
 for select
 to authenticated
-using (
-  exists (
-    select 1 from public.profiles
-    where user_id = (select auth.uid()) and role = 'admin'
-  )
-);
+using ((select public.is_admin()));
 
 drop policy if exists "Admins can insert audit logs" on public.admin_logs;
 create policy "Admins can insert audit logs"
@@ -484,11 +594,22 @@ for insert
 to authenticated
 with check (
   admin_id = (select auth.uid())
-  and exists (
-    select 1 from public.profiles
-    where user_id = (select auth.uid()) and role = 'admin'
-  )
+  and (select public.is_admin())
 );
+
+drop policy if exists "Admins can insert notifications" on public.notifications;
+create policy "Admins can insert notifications"
+on public.notifications
+for insert
+to authenticated
+with check ((select public.is_admin()));
+
+drop policy if exists "Admins can read all notifications" on public.notifications;
+create policy "Admins can read all notifications"
+on public.notifications
+for select
+to authenticated
+using ((select auth.uid()) = user_id or (select public.is_admin()));
 
 -- 3. profiles RLS: eski "for all" policy'yi böl
 drop policy if exists "Users can manage their own profiles" on public.profiles;
@@ -506,13 +627,14 @@ create policy "Admins can read all profiles"
 on public.profiles
 for select
 to authenticated
-using (
-  (select auth.uid()) = user_id
-  or exists (
-    select 1 from public.profiles as self
-    where self.user_id = (select auth.uid()) and self.role = 'admin'
-  )
-);
+using ((select auth.uid()) = user_id or (select public.is_admin()));
+
+drop policy if exists "Admins can read all categories" on public.categories;
+create policy "Admins can read all categories"
+on public.categories
+for select
+to authenticated
+using ((select auth.uid()) = user_id or (select public.is_admin()));
 
 -- 4. Admin cross-read: transactions
 drop policy if exists "Admins can read all transactions" on public.transactions;
@@ -520,13 +642,63 @@ create policy "Admins can read all transactions"
 on public.transactions
 for select
 to authenticated
-using (
-  (select auth.uid()) = user_id
-  or exists (
-    select 1 from public.profiles
-    where user_id = (select auth.uid()) and role = 'admin'
-  )
-);
+using ((select auth.uid()) = user_id or (select public.is_admin()));
+
+drop policy if exists "Admins can read all goals" on public.goals;
+create policy "Admins can read all goals"
+on public.goals
+for select
+to authenticated
+using ((select auth.uid()) = user_id or (select public.is_admin()));
+
+drop policy if exists "Admins can read all goal contributions" on public.goal_contributions;
+create policy "Admins can read all goal contributions"
+on public.goal_contributions
+for select
+to authenticated
+using ((select auth.uid()) = user_id or (select public.is_admin()));
+
+drop policy if exists "Admins can read all recurring rules" on public.recurring_rules;
+create policy "Admins can read all recurring rules"
+on public.recurring_rules
+for select
+to authenticated
+using ((select auth.uid()) = user_id or (select public.is_admin()));
+
+drop policy if exists "Admins can read all receipts" on public.receipts;
+create policy "Admins can read all receipts"
+on public.receipts
+for select
+to authenticated
+using ((select auth.uid()) = user_id or (select public.is_admin()));
+
+drop policy if exists "Admins can read all debts" on public.debts;
+create policy "Admins can read all debts"
+on public.debts
+for select
+to authenticated
+using ((select auth.uid()) = user_id or (select public.is_admin()));
+
+drop policy if exists "Admins can read all debt payments" on public.debt_payments;
+create policy "Admins can read all debt payments"
+on public.debt_payments
+for select
+to authenticated
+using ((select auth.uid()) = user_id or (select public.is_admin()));
+
+drop policy if exists "Admins can read all assets" on public.assets;
+create policy "Admins can read all assets"
+on public.assets
+for select
+to authenticated
+using ((select auth.uid()) = user_id or (select public.is_admin()));
+
+drop policy if exists "Admins can read all credit cards" on public.credit_cards;
+create policy "Admins can read all credit cards"
+on public.credit_cards
+for select
+to authenticated
+using ((select auth.uid()) = user_id or (select public.is_admin()));
 
 -- 5. Admin cross-read: notification_logs
 drop policy if exists "Admins can read all notification_logs" on public.notification_logs;
@@ -534,21 +706,147 @@ create policy "Admins can read all notification_logs"
 on public.notification_logs
 for select
 to authenticated
-using (
-  (select auth.uid()) = user_id
-  or exists (
-    select 1 from public.profiles
-    where user_id = (select auth.uid()) and role = 'admin'
+using ((select auth.uid()) = user_id or (select public.is_admin()));
+
+create or replace function public.set_user_role(target_user_id uuid, new_role text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not (select public.is_admin()) then
+    raise exception 'Access denied: admin role required';
+  end if;
+
+  if new_role not in ('user', 'admin') then
+    raise exception 'Invalid role';
+  end if;
+
+  update public.profiles
+  set role = new_role,
+      updated_at = now()
+  where user_id = target_user_id;
+
+  if not found then
+    raise exception 'Profile not found';
+  end if;
+end;
+$$;
+
+grant execute on function public.set_user_role(uuid, text) to authenticated;
+
+create or replace function public.set_user_banned(target_user_id uuid, next_is_banned boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not (select public.is_admin()) then
+    raise exception 'Access denied: admin role required';
+  end if;
+
+  if next_is_banned and exists (
+    select 1
+    from public.profiles
+    where user_id = target_user_id
+      and role = 'admin'
+  ) then
+    raise exception 'Admin users cannot be banned';
+  end if;
+
+  update public.profiles
+  set is_banned = next_is_banned,
+      updated_at = now()
+  where user_id = target_user_id;
+
+  if not found then
+    raise exception 'Profile not found';
+  end if;
+end;
+$$;
+
+grant execute on function public.set_user_banned(uuid, boolean) to authenticated;
+
+create or replace function public.add_goal_contribution(
+  p_goal_id uuid,
+  p_amount numeric,
+  p_contribution_date date,
+  p_note text default null
+)
+returns public.goal_contributions
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_row public.goal_contributions;
+begin
+  if v_user_id is null then
+    raise exception 'Authentication required';
+  end if;
+
+  if p_goal_id is null then
+    raise exception 'goalId required';
+  end if;
+
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'Contribution amount must be positive';
+  end if;
+
+  if p_contribution_date is null then
+    raise exception 'Contribution date required';
+  end if;
+
+  if not exists (
+    select 1
+    from public.goals
+    where id = p_goal_id
+      and user_id = v_user_id
+  ) then
+    raise exception 'Goal not found';
+  end if;
+
+  insert into public.goal_contributions (
+    user_id,
+    goal_id,
+    amount,
+    contribution_date,
+    note
   )
-);
+  values (
+    v_user_id,
+    p_goal_id,
+    p_amount,
+    p_contribution_date,
+    nullif(p_note, '')
+  )
+  returning * into v_row;
+
+  update public.goals
+  set current_amount = current_amount + p_amount,
+      updated_at = now()
+  where id = p_goal_id
+    and user_id = v_user_id;
+
+  return v_row;
+end;
+$$;
+
+grant execute on function public.add_goal_contribution(uuid, numeric, date, text) to authenticated;
 
 -- 6. Email erişimi için security definer function
+drop function if exists public.get_all_user_profiles();
+
 create or replace function public.get_all_user_profiles()
 returns table (
   user_id uuid,
   email text,
   display_name text,
   user_role text,
+  is_banned boolean,
   created_at timestamptz,
   updated_at timestamptz
 )
@@ -557,10 +855,7 @@ security definer
 set search_path = public
 as $$
 begin
-  if not exists (
-    select 1 from public.profiles as chk
-    where chk.user_id = auth.uid() and chk.role = 'admin'
-  ) then
+  if not (select public.is_admin()) then
     raise exception 'Access denied: admin role required';
   end if;
 
@@ -570,6 +865,7 @@ begin
     u.email::text,
     p.display_name,
     p.role as user_role,
+    p.is_banned,
     p.created_at,
     p.updated_at
   from public.profiles p

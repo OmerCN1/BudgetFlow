@@ -155,43 +155,31 @@ function buildWeeklySummary(data: {
   return { income, expense, net: income - expense, txCount: weekTxs.length }
 }
 
-// ── Email via Gmail SMTP ───────────────────────────────────────────────────────
+// ── Email via Resend ───────────────────────────────────────────────────────────
 
 async function sendEmail(opts: {
   to: string
   subject: string
   html: string
-  gmailUser: string
-  gmailAppPassword: string
+  resendApiKey: string
+  fromEmail: string
 }): Promise<{ sent: boolean; error?: string }> {
   try {
-    // Gmail SMTP via smtp2go-style relay — use smtp.gmail.com through fetch-based SMTP
-    // Deno doesn't have native SMTP, so we use an SMTP-over-HTTP relay (smtp2go free tier)
-    // OR encode as a raw SMTP request using Deno's TCP — simplest is to use a free relay API
-
-    // We'll use Gmail's API via OAuth2... but simplest for Deno is smtp library
-    const { SMTPClient } = await import("https://deno.land/x/denomailer@1.6.0/mod.ts")
-
-    const client = new SMTPClient({
-      connection: {
-        hostname: "smtp.gmail.com",
-        port: 465,
-        tls: true,
-        auth: {
-          username: opts.gmailUser,
-          password: opts.gmailAppPassword,
-        },
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${opts.resendApiKey}`,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        from: opts.fromEmail,
+        to: opts.to,
+        subject: opts.subject,
+        html: opts.html,
+      }),
     })
 
-    await client.send({
-      from: `BudgetFlow <${opts.gmailUser}>`,
-      to: opts.to,
-      subject: opts.subject,
-      html: opts.html,
-    })
-
-    await client.close()
+    if (!res.ok) return { sent: false, error: await res.text() }
     return { sent: true }
   } catch (e) {
     return { sent: false, error: String(e) }
@@ -246,7 +234,7 @@ function buildEmailHtml(displayName: string, items: NotificationItem[], type: "a
     <head><meta charset="utf-8"/></head>
     <body style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#fff;">
       <div style="text-align:center;margin-bottom:24px;">
-        <h1 style="color:#7c3aed;margin:0;font-size:28px;">BudgetFlow</h1>
+        <h1 style="color:#7c3aed;margin:0;font-size:28px;">BudgetAssist</h1>
         <p style="color:#888;margin:4px 0 0;font-size:14px;">Kişisel Finans Takip Sistemi</p>
       </div>
       <h2 style="color:#1a1a2e;font-size:18px;margin-bottom:8px;">${greeting}</h2>
@@ -260,7 +248,7 @@ function buildEmailHtml(displayName: string, items: NotificationItem[], type: "a
       }
       <div style="margin-top:32px;padding-top:16px;border-top:1px solid #eee;text-align:center;">
         <p style="color:#bbb;font-size:12px;margin:0;">
-          Bu bildirimi BudgetFlow üzerinden yönetebilirsiniz.<br/>
+          Bu bildirimi BudgetAssist üzerinden yönetebilirsiniz.<br/>
           Hesap → Bildirim Ayarları
         </p>
       </div>
@@ -306,16 +294,16 @@ function buildSmsText(displayName: string, items: NotificationItem[], type: "ale
   if (type === "weekly") {
     const s = weeklySummary!
     return (
-      `BudgetFlow Haftalık Özet — ${name}\n` +
+      `BudgetAssist Haftalık Özet — ${name}\n` +
       `Gelir: ${s.income.toFixed(0)} TL | Gider: ${s.expense.toFixed(0)} TL | Net: ${s.net.toFixed(0)} TL\n` +
       (items.length > 0 ? `Uyarı: ${items[0].title}` : "Her şey yolunda!")
     )
   }
 
   const critical = items.filter((i) => i.severity === "danger" || i.severity === "warning").slice(0, 3)
-  if (critical.length === 0) return `BudgetFlow: ${name}, şu an aktif uyarı yok.`
+  if (critical.length === 0) return `BudgetAssist: ${name}, şu an aktif uyarı yok.`
   return (
-    `BudgetFlow Uyarı — ${name}\n` +
+    `BudgetAssist Uyarı — ${name}\n` +
     critical.map((i) => `${severityEmoji(i.severity)} ${i.title}: ${i.body}`).join("\n")
   )
 }
@@ -327,11 +315,15 @@ serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  const gmailUser = Deno.env.get("GMAIL_USER") || ""
-  const gmailAppPassword = Deno.env.get("GMAIL_APP_PASSWORD") || ""
+  const resendApiKey = Deno.env.get("RESEND_API_KEY") || ""
+  const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || ""
   const twilioSid = Deno.env.get("TWILIO_ACCOUNT_SID") || ""
   const twilioToken = Deno.env.get("TWILIO_AUTH_TOKEN") || ""
   const twilioFrom = Deno.env.get("TWILIO_FROM_NUMBER") || ""
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return Response.json({ error: "Supabase service configuration missing" }, { status: 500, headers: corsHeaders })
+  }
 
   const db = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -343,18 +335,28 @@ serve(async (req) => {
     const targetUserId: string | null = body.user_id || null
 
     const authHeader = req.headers.get("authorization") || ""
-    // Allow service-role calls (cron) or authenticated users
-    const isServiceCall = authHeader.includes(supabaseServiceKey) || !authHeader
+    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.replace("Bearer ", "").trim() : ""
+    const isServiceCall = bearerToken === supabaseServiceKey
+
+    if (!bearerToken) {
+      return Response.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders })
+    }
 
     // When called by an authenticated user, extract their user_id
     let callerUserId: string | null = null
-    if (authHeader.startsWith("Bearer ") && !isServiceCall) {
-      const token = authHeader.replace("Bearer ", "")
-      const { data: { user } } = await db.auth.getUser(token)
+    if (!isServiceCall) {
+      const { data: { user }, error: userError } = await db.auth.getUser(bearerToken)
+      if (userError || !user?.id) {
+        return Response.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders })
+      }
       callerUserId = user?.id || null
     }
 
-    const effectiveUserId = targetUserId || callerUserId
+    if (!isServiceCall && targetUserId && targetUserId !== callerUserId) {
+      return Response.json({ error: "Forbidden" }, { status: 403, headers: corsHeaders })
+    }
+
+    const effectiveUserId = isServiceCall ? targetUserId : callerUserId
 
     // Fetch profiles to process
     let profileQuery = db
@@ -407,18 +409,18 @@ serve(async (req) => {
       }
 
       // Send email
-      if (profile.notification_email && userEmail && gmailUser && gmailAppPassword) {
+      if (profile.notification_email && userEmail && resendApiKey && resendFromEmail) {
         const subject =
           notifType === "weekly"
-            ? `BudgetFlow Haftalık Özet — ${new Date().toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}`
-            : `BudgetFlow Uyarı: ${notifications[0]?.title || "Yeni bildirimler var"}`
+            ? `BudgetAssist Haftalık Özet — ${new Date().toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}`
+            : `BudgetAssist Uyarı: ${notifications[0]?.title || "Yeni bildirimler var"}`
 
         result.email = await sendEmail({
           to: userEmail,
           subject,
           html: buildEmailHtml(profile.display_name || "", notifications, notifType, weeklySummary),
-          gmailUser,
-          gmailAppPassword,
+          resendApiKey,
+          fromEmail: resendFromEmail,
         })
       }
 

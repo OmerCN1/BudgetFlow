@@ -1,6 +1,9 @@
 import { useState } from "react"
-import { S, FONT_BODY, btnPrimary } from "../../constants/theme"
+import { S, btnPrimary } from "../../constants/theme"
 import { TRY } from "../../utils/helpers"
+
+const BRAND_LOGO_SRC = "/assets/ba_full_png_black.svg"
+const BRAND_LOGO_DARK_SRC = "/assets/ba_full_png_black.svg"
 
 export default function Header({ view, setView, balance, notificationCount = 0, onAddTx, user, isAdmin, disabled, theme, toggleTheme }) {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -12,6 +15,7 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
     .map((part) => part[0])
     .join("")
     .toUpperCase()
+  const brandLogoSrc = theme === "dark" ? BRAND_LOGO_DARK_SRC : BRAND_LOGO_SRC
 
   const NAV = [
     { id: "dashboard",     label: "Özet",        icon: "dashboard",     group: "Genel" },
@@ -49,11 +53,11 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
       aria-label="Menüyü aç"
       aria-expanded={mobileOpen}
     >
-      <span className="mobile-sidebar-mark">BF</span>
-      <span>
-        <strong>BudgetFlow</strong>
-        <small>PREMIUM FİNANS</small>
-      </span>
+      <img
+        src={brandLogoSrc}
+        alt="BudgetAssist"
+        style={{ width: 156, maxWidth: "62vw", height: 46, display: "block", objectFit: "cover", objectPosition: "center" }}
+      />
       <svg aria-hidden="true" viewBox="0 0 24 24">
         <path d="M4 7h16M4 12h16M4 17h16" />
       </svg>
@@ -78,31 +82,11 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
           flexShrink: 0,
         }}
       >
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 8,
-            background: `linear-gradient(135deg,${S.green},${S.cyan})`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 16,
-            fontWeight: 900,
-            color: "#002113",
-            boxShadow: "0 0 32px rgba(78,222,163,0.28), inset 0 1px 0 rgba(255,255,255,0.38)",
-          }}
-        >
-          BF
-        </div>
-        <div>
-          <div style={{ fontWeight: 800, fontSize: 18, letterSpacing: 0, fontFamily: FONT_BODY }}>
-            BudgetFlow
-          </div>
-          <div style={{ color: S.green, fontSize: 12, letterSpacing: 0, marginTop: 4 }}>
-            PREMIUM FİNANS
-          </div>
-        </div>
+        <img
+          src={brandLogoSrc}
+          alt="BudgetAssist"
+          style={{ width: 176, maxWidth: "calc(100% - 44px)", height: 52, display: "block", objectFit: "cover", objectPosition: "center" }}
+        />
         <button
           className="mobile-sidebar-close"
           type="button"
@@ -178,7 +162,7 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
         <div className="sidebar-footer-row">
           {user?.email && (
             <button className="sidebar-profile" onClick={() => navigate("account")} title={user.email} type="button">
-              <span className="sidebar-profile-avatar">{initials || "BF"}</span>
+              <span className="sidebar-profile-avatar">{initials || "BA"}</span>
               <span className="sidebar-profile-copy">
                 <span>{displayName}</span>
                 <small>Profil</small>

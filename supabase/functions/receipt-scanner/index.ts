@@ -63,7 +63,7 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `Sen BudgetFlow için Türkçe fiş ve makbuz okuma uzmanısın.
+            content: `Sen BudgetAssist için Türkçe fiş ve makbuz okuma uzmanısın.
 
 Görseldeki fişten şu bilgileri çıkar:
 - merchant: İşletme/mağaza adı (fişteki header'dan al, net değilse tahmin et)

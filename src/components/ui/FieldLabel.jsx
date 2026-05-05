@@ -10,6 +10,7 @@ export default function FieldLabel({ children }) {
         textTransform: "uppercase",
         color: S.sub,
         marginBottom: 10,
+        marginTop: 30,
       }}
     >
       {children}

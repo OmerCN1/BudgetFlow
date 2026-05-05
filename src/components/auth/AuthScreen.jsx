@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react"
 import { supabase } from "../../lib/supabase"
 import { FONT_BODY } from "../../constants/theme"
 
+const BRAND_LOGO_SRC = "/assets/ba_full_png_black.svg"
+
+
 const IconUser = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
@@ -99,6 +102,16 @@ export default function AuthScreen({ isConfigured, initialMode = "login", onBack
     setMode(initialMode)
   }, [initialMode])
 
+  useEffect(() => {
+    const root = document.documentElement
+    const prev = root.getAttribute("data-theme")
+    root.setAttribute("data-theme", "dark")
+    return () => {
+      if (prev) root.setAttribute("data-theme", prev)
+      else root.removeAttribute("data-theme")
+    }
+  }, [])
+
   useEffect(() => () => clearTimeout(switchTimerRef.current), [])
 
   const switchMode = (newMode) => {
@@ -157,8 +170,8 @@ export default function AuthScreen({ isConfigured, initialMode = "login", onBack
 
         <div className="auth2-panel-content">
           <div className="auth2-brand">
-            <div className="auth2-brand-mark">BF</div>
-            <span className="auth2-brand-name">BudgetFlow</span>
+            <img className="public-brand-logo" src={BRAND_LOGO_SRC} alt="BudgetAssist" />
+            
           </div>
 
           <div className="auth2-panel-hero">
@@ -201,8 +214,8 @@ export default function AuthScreen({ isConfigured, initialMode = "login", onBack
               <IconArrowLeft />
             </button>
             <div className="auth2-brand">
-              <div className="auth2-brand-mark">BF</div>
-              <span className="auth2-brand-name">BudgetFlow</span>
+              <div className="auth2-brand-mark"><span style={{color:"#1B3A6B"}}>B</span><span style={{color:"#22B573"}}>A</span></div>
+              <span className="auth2-brand-name">BudgetAssist</span>
             </div>
           </div>
 
@@ -404,7 +417,7 @@ export default function AuthScreen({ isConfigured, initialMode = "login", onBack
             <a href="#privacy" onClick={(event) => { event.preventDefault(); onOpenPage("privacy") }}>Gizlilik</a>
             <a href="#terms" onClick={(event) => { event.preventDefault(); onOpenPage("terms") }}>Kullanım Koşulları</a>
             <a href="#security" onClick={(event) => { event.preventDefault(); onOpenPage("security") }}>Güvenlik</a>
-            <span>© 2026 BudgetFlow</span>
+            <span>© 2026 BudgetAssist</span>
           </footer>
         </div>
       </div>

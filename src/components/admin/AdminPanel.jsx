@@ -46,22 +46,21 @@ export default function AdminPanel({ user, isAdmin, loading, setView }) {
             width: 28,
             height: 28,
             borderRadius: 6,
-            background: "linear-gradient(135deg, #4cd7f6, #4edea3)",
+            background: "#f8f9fa",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             fontSize: "0.7rem",
             fontWeight: 900,
-            color: "#030508",
             flexShrink: 0,
           }}>
-            BF
+            <span style={{ color: "#1B3A6B" }}>B</span><span style={{ color: "#22B573" }}>A</span>
           </div>
           <div>
             <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "#dde4dd", lineHeight: 1 }}>
               Admin Console
             </div>
-            <div style={{ fontSize: "0.6rem", color: "#86948a", marginTop: 2 }}>BudgetFlow</div>
+            <div style={{ fontSize: "0.6rem", color: "#86948a", marginTop: 2 }}>BudgetAssist</div>
           </div>
         </div>
 

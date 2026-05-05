@@ -174,7 +174,7 @@ function PhysicalCard({ card, isSelected, onClick }) {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
               <div style={{ fontSize: "clamp(8px,2.2vw,11px)", color: "rgba(255,255,255,0.6)", fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 2 }}>
-                {card.bankName || "BudgetFlow"}
+                {card.bankName || "BudgetAssist"}
               </div>
               <div style={{ fontSize: "clamp(11px,3vw,15px)", fontWeight: 800, color: "#fff", letterSpacing: "0.02em" }}>
                 {card.name}

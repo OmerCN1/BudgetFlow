@@ -1,5 +1,7 @@
 import { useEffect, useMemo } from "react"
 import { S, FONT_BODY, btnPrimary, btnGhost } from "../../constants/theme"
+const BRAND_LOGO_SRC = "/assets/ba_full_png_black.svg"
+
 
 const PAGES = {
   privacy: {
@@ -7,7 +9,7 @@ const PAGES = {
     kicker: "Gizlilik",
     title: "Verileriniz sizin kontrolünüzde.",
     summary:
-      "BudgetFlow, finansal verilerinizi yalnızca hesabınızdaki deneyimi oluşturmak, güvenliği korumak ve destek taleplerini yanıtlamak için kullanır.",
+      "BudgetAssist, finansal verilerinizi yalnızca hesabınızdaki deneyimi oluşturmak, güvenliği korumak ve destek taleplerini yanıtlamak için kullanır.",
     stat: "KVKK / GDPR odakli",
     updated: "30 Nisan 2026",
     cards: [
@@ -26,7 +28,7 @@ const PAGES = {
     kicker: "Koşullar",
     title: "Net kurallar, sorunsuz finans takibi.",
     summary:
-      "BudgetFlow'u kullanarak hesabınızın güvenliğinden, girdiğiniz verilerin doğruluğundan ve hizmeti yasal amaçlarla kullanmaktan sorumlu olursunuz.",
+      "BudgetAssist'i kullanarak hesabınızın güvenliğinden, girdiğiniz verilerin doğruluğundan ve hizmeti yasal amaçlarla kullanmaktan sorumlu olursunuz.",
     stat: "Adil kullanım",
     updated: "30 Nisan 2026",
     cards: [
@@ -35,7 +37,7 @@ const PAGES = {
       ["Kullanım", "Hizmet, kişisel veya iş finans takibi içindir; kötüye kullanım ve yetkisiz erişim girişimleri yasaktır."],
     ],
     sections: [
-      ["Hizmet kapsamı", "BudgetFlow gelir, gider, hedef, rapor, belge ve AI destekli yorumlama araçları sunar. Finansal kararlar nihai olarak kullanıcıya aittir."],
+      ["Hizmet kapsamı", "BudgetAssist gelir, gider, hedef, rapor, belge ve AI destekli yorumlama araçları sunar. Finansal kararlar nihai olarak kullanıcıya aittir."],
       ["Plan değişiklikleri", "Özellikler ve fiyatlar önceden duyurularak güncellenebilir. Kritik değişikliklerde kullanıcıya bilgilendirme yapılır."],
       ["Fesih", "Koşullara aykırı kullanımda erişim kısıtlanabilir. Kullanıcı istediği zaman hesabını kapatma talebinde bulunabilir."],
     ],
@@ -45,7 +47,7 @@ const PAGES = {
     kicker: "Güvenlik",
     title: "Finansal veriler için sakin ve güçlü koruma.",
     summary:
-      "BudgetFlow; kimlik doğrulama, erişim kontrolü, şifrelenmiş iletişim ve düzenli izleme yaklaşımlarıyla hassas verileri korumaya odaklanır.",
+      "BudgetAssist; kimlik doğrulama, erişim kontrolü, şifrelenmiş iletişim ve düzenli izleme yaklaşımlarıyla hassas verileri korumaya odaklanır.",
     stat: "%99.9 izleme",
     updated: "30 Nisan 2026",
     cards: [
@@ -68,9 +70,9 @@ const PAGES = {
     stat: "24 saat içinde dönüş",
     updated: "30 Nisan 2026",
     cards: [
-      ["Destek", "support@budgetflow.app üzerinden hesap ve ürün yardımı alabilirsiniz."],
-      ["Güvenlik", "security@budgetflow.app adresi güvenlik bildirimleri için öncelikli kanaldır."],
-      ["İş ortaklığı", "partnerships@budgetflow.app ile entegrasyon ve iş birliği taleplerini paylaşabilirsiniz."],
+      ["Destek", "support@budgetassist.app üzerinden hesap ve ürün yardımı alabilirsiniz."],
+      ["Güvenlik", "security@budgetassist.app adresi güvenlik bildirimleri için öncelikli kanaldır."],
+      ["İş ortaklığı", "partnerships@budgetassist.app ile entegrasyon ve iş birliği taleplerini paylaşabilirsiniz."],
     ],
     sections: [
       ["Çalışma saatleri", "Hafta içi 09:00-18:00 arasında destek talepleri öncelikli olarak yanıtlanır."],
@@ -90,6 +92,16 @@ export default function PublicInfoPage({ page = "privacy", onBackLanding, onLogi
     window.scrollTo({ top: 0, behavior: "smooth" })
   }, [page])
 
+  useEffect(() => {
+    const root = document.documentElement
+    const prev = root.getAttribute("data-theme")
+    root.setAttribute("data-theme", "dark")
+    return () => {
+      if (prev) root.setAttribute("data-theme", prev)
+      else root.removeAttribute("data-theme")
+    }
+  }, [])
+
   const openPage = (event, id) => {
     event.preventDefault()
     onOpenPage(id)
@@ -98,9 +110,8 @@ export default function PublicInfoPage({ page = "privacy", onBackLanding, onLogi
   return (
     <div className="public-page public-info-page" style={{ fontFamily: FONT_BODY }}>
       <nav className="public-nav public-info-nav">
-        <button className="public-brand" onClick={onBackLanding} type="button" aria-label="BudgetFlow ana sayfa">
-          <span className="public-brand-mark">BF</span>
-          <span>BudgetFlow</span>
+                <button className="public-brand" onClick={onBackLanding} type="button" aria-label="BudgetAssist">
+        <img className="public-brand-logo" src={BRAND_LOGO_SRC} alt="BudgetAssist" />
         </button>
         <div className="public-nav-links" aria-label="Bilgi sayfalari">
           {footerPages.map((id) => (
@@ -179,7 +190,7 @@ export default function PublicInfoPage({ page = "privacy", onBackLanding, onLogi
         </section>
 
         <section className="public-info-cta">
-          <h2>BudgetFlow'u deneyin</h2>
+          <h2>BudgetAssist'i deneyin</h2>
           <p>Finansal kayıtlarınızı daha net takip etmek için ücretsiz hesap oluşturun.</p>
           <div>
             <button onClick={onSignup} type="button" style={{ ...btnPrimary, padding: "14px 24px" }}>
@@ -194,8 +205,8 @@ export default function PublicInfoPage({ page = "privacy", onBackLanding, onLogi
 
       <footer className="public-footer">
         <div>
-          <strong>BudgetFlow</strong>
-          <span>© 2026 BudgetFlow. Private Wealth Management Systems.</span>
+          <strong>BudgetAssist</strong>
+          <span>© 2026 BudgetAssist. Private Wealth Management Systems.</span>
         </div>
         <div>
           {footerPages.map((id) => (

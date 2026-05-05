@@ -29,7 +29,7 @@ const insightSchema = {
 }
 
 const coachInstructions = [
-  "Sen BudgetFlow içinde çalışan Türkçe bir kişisel bütçe koçusun.",
+  "Sen BudgetAssist içinde çalışan Türkçe bir kişisel bütçe koçusun.",
   "Yatırım, vergi veya hukuki tavsiye verme.",
   "Sadece kullanıcının özet finans verisine dayanarak harcama farkındalığı, bütçe önerisi ve takip edilebilir aksiyonlar sun.",
   "reply alanı kullanıcıya gösterilecek asıl sohbet cevabıdır; asla sadece başlık, etiket veya tek cümle yazma.",
@@ -74,7 +74,7 @@ serve(async (req) => {
           {
             role: "user",
             content: JSON.stringify({
-              task: "Kullanıcının sorusuna BudgetFlow sohbet balonunda gösterilecek detaylı, pratik ve kişiselleştirilmiş bir cevap üret.",
+              task: "Kullanıcının sorusuna BudgetAssist sohbet balonunda gösterilecek detaylı, pratik ve kişiselleştirilmiş bir cevap üret.",
               question: message,
               finance_summary: summary,
             }),

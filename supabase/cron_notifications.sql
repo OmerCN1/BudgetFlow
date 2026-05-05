@@ -1,5 +1,13 @@
 -- Supabase Dashboard → Database → Extensions → pg_cron aktif edilmeli
--- Ardından bu SQL'i Supabase SQL Editor'da çalıştırın
+-- pg_net de HTTP çağrıları için gereklidir.
+-- Ardından app.settings değerlerini proje URL'niz ve service-role key'inizle ayarlayıp bu SQL'i çalıştırın.
+
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+-- Örnek:
+-- alter database postgres set app.settings.supabase_url = 'https://your-project-ref.supabase.co';
+-- alter database postgres set app.settings.service_role_key = 'your-service-role-key';
 
 -- Haftalık özet: Her Pazartesi sabah 09:00 (Europe/Istanbul → UTC+3 = 06:00 UTC)
 select cron.schedule(

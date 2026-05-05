@@ -4,6 +4,9 @@ import { loadAuditLogs } from "../../services/adminService"
 const ACTION_LABELS = {
   view_user: "Kullanıcı Görüntülendi",
   change_role: "Rol Değiştirildi",
+  ban_user: "Hesap Askıya Alındı",
+  unban_user: "Askı Kaldırıldı",
+  broadcast_notification: "Toplu Bildirim",
   view_data: "Veri Görüntülendi",
 }
 
