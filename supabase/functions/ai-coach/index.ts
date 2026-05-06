@@ -31,14 +31,42 @@ const insightSchema = {
 const coachInstructions = [
   "Sen BudgetAssist içinde çalışan Türkçe bir kişisel bütçe koçusun.",
   "Yatırım, vergi veya hukuki tavsiye verme.",
-  "Sadece kullanıcının özet finans verisine dayanarak harcama farkındalığı, bütçe önerisi ve takip edilebilir aksiyonlar sun.",
+  "Sadece kullanıcının finans özetinde bulunan verilere dayanarak harcama farkındalığı, bütçe önerisi ve takip edilebilir aksiyonlar sun.",
+  "Veride olmayan tutar, tarih, kişi, kurum veya işlem bilgisini uydurma; eksikse bunu kısa ve doğal biçimde söyle.",
+  "Soruyla ilgili alanlara odaklan: işlemler, bütçeler, hedefler, tekrarlı ödemeler, borçlar, varlıklar ve kredi kartları arasından en alakalı olanları kullan.",
   "reply alanı kullanıcıya gösterilecek asıl sohbet cevabıdır; asla sadece başlık, etiket veya tek cümle yazma.",
-  "reply alanını 4-7 kısa cümle veya 3-5 maddelik net bir analiz olarak yaz.",
+  "reply alanını 4-6 kısa cümle veya 3-5 maddelik net bir analiz olarak yaz.",
   "Kullanıcının sorusu 3 öneri istiyorsa tam 3 numaralı öneri ver.",
-  "Mümkün olduğunda kategori adı, TL tutarı, kalan bütçe ve önceki ay farkı gibi somut sayıları kullan.",
+  "Mümkün olduğunda kategori adı, TL tutarı, kalan bütçe, son işlem, yaklaşan ödeme ve önceki ay farkı gibi somut sayıları kullan.",
   "insights alanı yan panel kartları içindir; 1-3 kısa içgörü döndür ve reply alanını kopyalama.",
   `Yalnızca şu JSON şemasına uyan geçerli JSON döndür: ${JSON.stringify(insightSchema)}`,
 ].join(" ")
+
+const defaultModel = "openai/gpt-oss-20b"
+
+function buildResponseFormat(model: string) {
+  if (model.startsWith("openai/gpt-oss")) {
+    return {
+      type: "json_schema",
+      json_schema: {
+        name: "budget_coach_response",
+        schema: insightSchema,
+        strict: true,
+      },
+    }
+  }
+
+  return { type: "json_object" }
+}
+
+function buildModelOptions(model: string) {
+  if (!model.startsWith("openai/gpt-oss")) return {}
+
+  return {
+    reasoning_effort: Deno.env.get("GROQ_REASONING_EFFORT") || "low",
+    include_reasoning: false,
+  }
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -58,6 +86,7 @@ serve(async (req) => {
 
   try {
     const { message, summary } = await req.json()
+    const model = Deno.env.get("GROQ_MODEL") || defaultModel
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -65,7 +94,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: Deno.env.get("GROQ_MODEL") || "llama-3.1-8b-instant",
+        model,
         messages: [
           {
             role: "system",
@@ -80,9 +109,10 @@ serve(async (req) => {
             }),
           },
         ],
-        response_format: { type: "json_object" },
+        response_format: buildResponseFormat(model),
+        ...buildModelOptions(model),
         temperature: 0.2,
-        max_tokens: 900,
+        max_completion_tokens: 750,
       }),
     })
 

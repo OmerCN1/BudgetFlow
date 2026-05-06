@@ -1,8 +1,25 @@
+import { useEffect } from "react"
 import { createPortal } from "react-dom"
 
 import { S, FONT_BODY, btnGhost, btnPrimary } from "../../constants/theme"
 
 export default function Modal({ title, onClose, onSave, children }) {
+  useEffect(() => {
+    const nextCount = Number(document.body.dataset.modalOpenCount || 0) + 1
+    document.body.dataset.modalOpenCount = String(nextCount)
+    document.body.classList.add("modal-open")
+
+    return () => {
+      const remainingCount = Math.max(Number(document.body.dataset.modalOpenCount || 1) - 1, 0)
+      if (remainingCount === 0) {
+        document.body.classList.remove("modal-open")
+        delete document.body.dataset.modalOpenCount
+      } else {
+        document.body.dataset.modalOpenCount = String(remainingCount)
+      }
+    }
+  }, [])
+
   return createPortal(
     <div
       className="modal-overlay"

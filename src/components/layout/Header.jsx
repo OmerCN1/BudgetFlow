@@ -40,6 +40,7 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
   }
 
   const addTransaction = () => {
+    setView("transactions")
     onAddTx()
     setMobileOpen(false)
   }

@@ -31,6 +31,10 @@ body {
   overflow-x: hidden;
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 #root {
   min-height: 100vh;
 }
@@ -639,6 +643,7 @@ button:active {
 
 .modal-overlay {
   background: rgba(5,9,13,0.78);
+  overscroll-behavior: contain;
 }
 
 .modal-panel {
@@ -646,12 +651,20 @@ button:active {
   padding: 1.5rem !important;
   display: flex;
   flex-direction: column;
+  overscroll-behavior: contain;
 }
 
 .modal-body {
   min-height: 0;
   overflow-y: auto;
   padding-right: 0.15rem;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.modal-body::-webkit-scrollbar {
+  display: none;
 }
 
 .modal-close-button {
@@ -698,6 +711,13 @@ button:active {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 0.25rem;
+    overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.modal-body::-webkit-scrollbar {
+  display: none;
 }
 
 .sidebar-balance-card {
@@ -9662,6 +9682,12 @@ button:active {
   max-width: 480px;
   max-height: 85vh;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.admin-modal::-webkit-scrollbar {
+  display: none;
 }
 
 .admin-modal-header {

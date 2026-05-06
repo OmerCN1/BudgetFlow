@@ -174,9 +174,9 @@ export default function CurrencyRates() {
                   />
                 </LineChart>
               </ResponsiveContainer>
-              <p style={{ fontSize: 10, color: S.muted, marginTop: 8 }}>
+              {/* <p style={{ fontSize: 10, color: S.muted, marginTop: 8 }}>
                 * Grafik anlık kur etrafında simüle edilmiştir. Gerçek tarihsel veri için premium API gereklidir.
-              </p>
+              </p> */}
             </Card>
 
             <Card>

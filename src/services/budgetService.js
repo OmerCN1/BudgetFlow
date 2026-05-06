@@ -658,18 +658,7 @@ async function materializeDueRecurringRules(userId, recurringRows, transactionRo
 }
 
 export async function loadBudgetData(user) {
-  const profile = await ensureProfile(user)
-
-  const { count, error: countError } = await supabase
-    .from("categories")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id)
-
-  if (countError) throw countError
-
-  if (!profile.seeded_at && count === 0) {
-    await seedUserData(user.id)
-  }
+  await ensureProfile(user)
 
   let [
     categoriesResult,
@@ -779,24 +768,6 @@ export async function loadBudgetData(user) {
     transactionsResult = nextTransactionsResult
   }
 
-  if (categoriesResult.data.length < INIT_CATS.length || transactionsResult.data.length < INIT_TXS.length) {
-    await ensureCoreDemoData(user.id, categoriesResult.data, transactionsResult.data)
-    const [nextCategoriesResult, nextTransactionsResult] = await Promise.all([
-      supabase.from("categories").select("*").eq("user_id", user.id).order("created_at", { ascending: true }),
-      supabase
-        .from("transactions")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("transaction_date", { ascending: false })
-        .order("created_at", { ascending: false }),
-    ])
-
-    if (nextCategoriesResult.error) throw nextCategoriesResult.error
-    if (nextTransactionsResult.error) throw nextTransactionsResult.error
-    categoriesResult = nextCategoriesResult
-    transactionsResult = nextTransactionsResult
-  }
-
   const createdRecurringCount = await materializeDueRecurringRules(
     user.id,
     optionalRows(recurringResult),
@@ -831,24 +802,16 @@ export async function loadBudgetData(user) {
   const messageRows = optionalRows(messagesResult)
   const receiptRows = optionalRows(receiptsResult)
   const categoryRows = categoriesResult.data.map(toCategory)
-  recurringRows = await ensureSubscriptionRules(user.id, categoryRows, recurringRows)
-  const completedRows = await ensurePresentationData(user.id, categoryRows, {
-    goalRows,
-    contributionRows,
-    recurringRows,
-    insightRows,
-    messageRows,
-  })
 
   return {
     profile: profileResult.data,
     cats: categoryRows,
     txs: transactionsResult.data.map(toTransaction),
-    goals: completedRows.goalRows.map(toGoal),
-    contributions: completedRows.contributionRows.map(toContribution),
-    recurringRules: completedRows.recurringRows.map(toRecurringRule),
-    aiInsights: completedRows.insightRows.map(toAiInsight),
-    aiMessages: completedRows.messageRows.map(toAiMessage),
+    goals: goalRows.map(toGoal),
+    contributions: contributionRows.map(toContribution),
+    recurringRules: recurringRows.map(toRecurringRule),
+    aiInsights: insightRows.map(toAiInsight),
+    aiMessages: messageRows.map(toAiMessage),
     receipts: receiptRows.map(toReceipt),
   }
 }
@@ -1481,6 +1444,9 @@ function buildLocalCoachResponse(message, summary) {
   const topLocation = summary?.topLocations?.[0]
   const budgetRisk = summary?.budgetStatus?.find((item) => item.remaining < 0)
     || summary?.budgetStatus?.find((item) => item.budget > 0 && item.spent / item.budget >= 0.8)
+  const cardUsage = summary?.creditCards?.usageRate || 0
+  const debtTotal = summary?.debts?.iOweTotal || 0
+  const assetCount = summary?.assets?.count || 0
 
   const lines = [
     "AI Edge Function henüz deploy edilmediği için yerel analiz modundayım.",
@@ -1496,6 +1462,15 @@ function buildLocalCoachResponse(message, summary) {
   }
   if (budgetRisk) {
     lines.push(`${budgetRisk.name} bütçesinde dikkat gerekiyor; kalan tutar ${Math.round(budgetRisk.remaining).toLocaleString("tr-TR")} TL.`)
+  }
+  if (cardUsage > 0) {
+    lines.push(`Kredi kartı kullanım oranınız yaklaşık %${cardUsage}; minimum ödeme toplamı ${Math.round(summary.creditCards.minPaymentEstimate || 0).toLocaleString("tr-TR")} TL görünüyor.`)
+  }
+  if (debtTotal > 0) {
+    lines.push(`Aktif borçlarınızda kalan toplam ${Math.round(debtTotal).toLocaleString("tr-TR")} TL.`)
+  }
+  if (assetCount > 0) {
+    lines.push(`${assetCount} varlık kaydınız koç özetine dahil edildi.`)
   }
 
   return {

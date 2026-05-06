@@ -8,6 +8,11 @@ export default function AICoach({
   cats,
   goals,
   recurringRules,
+  profile,
+  debts,
+  debtPayments,
+  assets,
+  creditCards,
   aiMessages,
   aiInsights,
   onAskCoach,
@@ -17,8 +22,8 @@ export default function AICoach({
   const [loading, setLoading] = useState(false)
   const messagesEndRef = useRef(null)
   const summary = useMemo(
-    () => buildCoachSummary({ txs, cats, goals, recurringRules }),
-    [txs, cats, goals, recurringRules]
+    () => buildCoachSummary({ txs, cats, goals, recurringRules, profile, debts, debtPayments, assets, creditCards }),
+    [txs, cats, goals, recurringRules, profile, debts, debtPayments, assets, creditCards]
   )
   const proactiveInsights = useMemo(() => buildProactiveInsights(summary), [summary])
   const visibleInsights = useMemo(

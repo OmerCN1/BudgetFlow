@@ -1104,6 +1104,11 @@ export default function App() {
                   cats={cats}
                   goals={goals}
                   recurringRules={recurringRules}
+                  profile={profile}
+                  debts={debts}
+                  debtPayments={debtPayments}
+                  assets={assets}
+                  creditCards={creditCards}
                   aiMessages={aiMessages}
                   aiInsights={aiInsights}
                   onAskCoach={handleAskCoach}
