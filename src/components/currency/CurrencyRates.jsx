@@ -5,9 +5,11 @@ import { S, FONT_BODY, FONT_MONO, inputStyle } from "../../constants/theme"
 import { TRY } from "../../utils/helpers"
 import {
   fetchRates,
+  fetchRateHistory,
   SUPPORTED_CURRENCIES,
-  CURRENCY_LABELS,
   CURRENCY_SYMBOLS,
+  CURRENCY_FLAGS,
+  currencyName,
   toTRY,
   fromTRY,
   formatForeign,
@@ -25,23 +27,6 @@ const RATE_COLORS = {
   AED: "#fb923c",
 }
 
-function buildSimulatedHistory(rates) {
-  // Simulate 7-day history with ±2% noise around current rate for demo purposes
-  const days = 7
-  return DISPLAY_CURRENCIES.map((code) => {
-    const base = rates[code] || 1
-    const points = Array.from({ length: days }, (_, i) => {
-      const seed = (code.charCodeAt(0) * 31 + i * 17) % 100
-      const noise = (seed / 100 - 0.5) * 0.04
-      return {
-        day: `G-${days - 1 - i}`,
-        value: Math.round(base * (1 + noise) * 100) / 100,
-      }
-    })
-    return { code, points }
-  })
-}
-
 export default function CurrencyRates() {
   const [rates, setRates] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -51,13 +36,30 @@ export default function CurrencyRates() {
   const [toCur, setToCur] = useState("USD")
   const [history, setHistory] = useState([])
   const [selectedChart, setSelectedChart] = useState("USD")
+  const [historyNotice, setHistoryNotice] = useState("")
 
   useEffect(() => {
     setLoading(true)
-    fetchRates()
-      .then((r) => {
+    setHistoryNotice("")
+    Promise.all([
+      fetchRates(),
+      fetchRateHistory(DISPLAY_CURRENCIES, 30).catch(() => null),
+    ])
+      .then(([r, historical]) => {
         setRates(r)
-        setHistory(buildSimulatedHistory(r))
+        if (historical?.some((item) => item.points.length > 0)) {
+          const fallback = buildCurrentRateHistory(r)
+          setHistory(DISPLAY_CURRENCIES.map((code) => {
+            const item = historical.find((series) => series.code === code)
+            return item?.points.length ? item : fallback.find((series) => series.code === code)
+          }))
+          if (historical.some((item) => item.points.length === 0)) {
+            setHistoryNotice("Bazı para birimleri için geçmiş veri bulunamadı; o grafiklerde anlık kur gösterilir.")
+          }
+        } else {
+          setHistory(buildCurrentRateHistory(r))
+          setHistoryNotice("Geçmiş kur verisi alınamadı; grafik anlık kur değerleriyle sabitlendi.")
+        }
       })
       .catch(() => setError("Kur verileri yüklenemedi."))
       .finally(() => setLoading(false))
@@ -82,7 +84,7 @@ export default function CurrencyRates() {
         </div>
         {rates && (
           <span style={{ fontSize: 11, color: S.muted, alignSelf: "flex-end" }}>
-            Kaynak: open.er-api.com · 1 saatlik cache
+            Kaynak: open.er-api.com + Frankfurter · cache aktif
           </span>
         )}
       </div>
@@ -100,16 +102,14 @@ export default function CurrencyRates() {
             {DISPLAY_CURRENCIES.map((code) => {
               const rate = rates?.[code] || 0
               return (
-                <Card key={code} style={{ padding: "16px 18px" }}>
+                <Card key={code} className="fx-rate-card" style={{ padding: "16px 18px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                        <span style={{ fontSize: 20, fontWeight: 900, color: RATE_COLORS[code] || S.green }}>
-                          {CURRENCY_SYMBOLS[code]}
-                        </span>
+                        <span className="currency-flag" aria-hidden="true">{CURRENCY_FLAGS[code] || "🏳️"}</span>
                         <span style={{ fontSize: 14, fontWeight: 800, color: S.text }}>{code}</span>
                       </div>
-                      <div style={{ fontSize: 11, color: S.muted }}>{CURRENCY_LABELS[code]?.replace(/^. /, "") || code}</div>
+                      <div style={{ fontSize: 11, color: S.muted }}>{currencyName(code)}</div>
                     </div>
                     <div style={{ textAlign: "right" }}>
                       <div style={{ fontFamily: FONT_MONO, fontWeight: 800, fontSize: 16, color: S.text }}>
@@ -125,15 +125,18 @@ export default function CurrencyRates() {
 
           {/* Chart + Converter */}
           <div style={{ display: "grid", gridTemplateColumns: "1.4fr 0.6fr", gap: 10 }} className="fx-main-grid">
-            <Card>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                <p style={{ fontWeight: 700, fontSize: 14, color: S.text }}>7 Günlük Trend (tahmini)</p>
+            <Card className="fx-panel-card">
+              <div className="chart-card-header">
+                <p className="chart-card-title">30 Günlük Gerçek Trend</p>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {DISPLAY_CURRENCIES.map((code) => (
                     <button
                       key={code}
                       onClick={() => setSelectedChart(code)}
                       style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
                         padding: "4px 10px",
                         borderRadius: 20,
                         border: `1px solid ${selectedChart === code ? RATE_COLORS[code] : S.border}`,
@@ -145,6 +148,7 @@ export default function CurrencyRates() {
                         fontWeight: 700,
                       }}
                     >
+                      <span className="currency-chip-flag" aria-hidden="true">{CURRENCY_FLAGS[code] || "🏳️"}</span>
                       {code}
                     </button>
                   ))}
@@ -162,7 +166,14 @@ export default function CurrencyRates() {
                   />
                   <Tooltip
                     formatter={(v) => [`₺${v.toFixed(2)}`, `1 ${selectedChart}`]}
-                    contentStyle={{ background: S.card2, border: `1px solid ${S.border}`, color: S.text, fontSize: 12 }}
+                    contentStyle={{
+                      background: "var(--bf-tooltip-bg)",
+                      border: "1px solid var(--bf-tooltip-border)",
+                      borderRadius: 8,
+                      color: "var(--bf-tooltip-text)",
+                      boxShadow: "var(--bf-tooltip-shadow)",
+                      fontSize: 12,
+                    }}
                   />
                   <Line
                     type="monotone"
@@ -174,13 +185,15 @@ export default function CurrencyRates() {
                   />
                 </LineChart>
               </ResponsiveContainer>
-              {/* <p style={{ fontSize: 10, color: S.muted, marginTop: 8 }}>
-                * Grafik anlık kur etrafında simüle edilmiştir. Gerçek tarihsel veri için premium API gereklidir.
-              </p> */}
+              {historyNotice && (
+                <p style={{ fontSize: 10, color: S.amber, marginTop: 8 }}>
+                  {historyNotice}
+                </p>
+              )}
             </Card>
 
-            <Card>
-              <p style={{ fontWeight: 700, fontSize: 14, color: S.text, marginBottom: 16 }}>Çeviri Aracı</p>
+            <Card className="fx-panel-card">
+              <p className="chart-card-title" style={{ marginBottom: 16 }}>Çeviri Aracı</p>
               <div style={{ display: "grid", gap: 10 }}>
                 <div>
                   <label style={{ fontSize: 11, color: S.muted, display: "block", marginBottom: 4 }}>Kaynak tutar</label>
@@ -197,7 +210,7 @@ export default function CurrencyRates() {
                   <label style={{ fontSize: 11, color: S.muted, display: "block", marginBottom: 4 }}>Kaynak para birimi</label>
                   <select value={fromCur} onChange={(e) => setFromCur(e.target.value)} style={inputStyle}>
                     {SUPPORTED_CURRENCIES.map((c) => (
-                      <option key={c} value={c}>{CURRENCY_SYMBOLS[c]} {c}</option>
+                      <option key={c} value={c}>{CURRENCY_FLAGS[c]} {CURRENCY_SYMBOLS[c]} {c} - {currencyName(c)}</option>
                     ))}
                   </select>
                 </div>
@@ -206,7 +219,7 @@ export default function CurrencyRates() {
                   <label style={{ fontSize: 11, color: S.muted, display: "block", marginBottom: 4 }}>Hedef para birimi</label>
                   <select value={toCur} onChange={(e) => setToCur(e.target.value)} style={inputStyle}>
                     {SUPPORTED_CURRENCIES.map((c) => (
-                      <option key={c} value={c}>{CURRENCY_SYMBOLS[c]} {c}</option>
+                      <option key={c} value={c}>{CURRENCY_FLAGS[c]} {CURRENCY_SYMBOLS[c]} {c} - {currencyName(c)}</option>
                     ))}
                   </select>
                 </div>
@@ -242,9 +255,9 @@ export default function CurrencyRates() {
                       const cross = rates ? fromTRY(toTRY(1, fromCur, rates), code, rates) : 0
                       return (
                         <div key={code} style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
-                          <span style={{ color: S.sub }}>1 {fromCur} →</span>
+                          <span style={{ color: S.sub }}>{CURRENCY_FLAGS[fromCur]} 1 {fromCur} →</span>
                           <span style={{ fontFamily: FONT_MONO, color: RATE_COLORS[code] || S.text }}>
-                            {formatForeign(cross, code)} {code}
+                            {CURRENCY_FLAGS[code]} {formatForeign(cross, code)} {code}
                           </span>
                         </div>
                       )
@@ -258,4 +271,11 @@ export default function CurrencyRates() {
       )}
     </div>
   )
+}
+
+function buildCurrentRateHistory(rates) {
+  return DISPLAY_CURRENCIES.map((code) => ({
+    code,
+    points: [{ day: "Bugün", date: new Date().toISOString().slice(0, 10), value: rates?.[code] || 0 }],
+  }))
 }

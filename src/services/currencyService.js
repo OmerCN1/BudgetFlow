@@ -1,7 +1,29 @@
 const CACHE_KEY = "bf_fx_rates"
+const HISTORY_CACHE_KEY = "bf_fx_history"
 const CACHE_TTL = 60 * 60 * 1000 // 1 hour
+const HISTORY_CACHE_TTL = 12 * 60 * 60 * 1000 // 12 hours
 
 export const SUPPORTED_CURRENCIES = ["TRY", "USD", "EUR", "GBP", "CHF", "JPY", "SAR", "AED"]
+
+export const CURRENCY_FLAGS = {
+  TRY: "🇹🇷",
+  USD: "🇺🇸",
+  EUR: "🇪🇺",
+  GBP: "🇬🇧",
+  CHF: "🇨🇭",
+  JPY: "🇯🇵",
+  SAR: "🇸🇦",
+  AED: "🇦🇪",
+  CAD: "🇨🇦",
+  AUD: "🇦🇺",
+  CNY: "🇨🇳",
+  RUB: "🇷🇺",
+  QAR: "🇶🇦",
+  KWD: "🇰🇼",
+  NOK: "🇳🇴",
+  DKK: "🇩🇰",
+  SEK: "🇸🇪",
+}
 
 export const CURRENCY_LABELS = {
   TRY: "₺ Türk Lirası",
@@ -12,6 +34,15 @@ export const CURRENCY_LABELS = {
   JPY: "¥ Japon Yeni",
   SAR: "﷼ Suudi Riyali",
   AED: "د.إ Dirhem",
+  CAD: "C$ Kanada Doları",
+  AUD: "A$ Avustralya Doları",
+  CNY: "¥ Çin Yuanı",
+  RUB: "₽ Rus Rublesi",
+  QAR: "﷼ Katar Riyali",
+  KWD: "KD Kuveyt Dinarı",
+  NOK: "kr Norveç Kronu",
+  DKK: "kr Danimarka Kronu",
+  SEK: "kr İsveç Kronu",
 }
 
 export const CURRENCY_SYMBOLS = {
@@ -23,6 +54,19 @@ export const CURRENCY_SYMBOLS = {
   JPY: "¥",
   SAR: "﷼",
   AED: "د.إ",
+  CAD: "C$",
+  AUD: "A$",
+  CNY: "¥",
+  RUB: "₽",
+  QAR: "﷼",
+  KWD: "KD",
+  NOK: "kr",
+  DKK: "kr",
+  SEK: "kr",
+}
+
+export function currencyName(code) {
+  return CURRENCY_LABELS[code]?.replace(/^[^\s]+ /, "") || code
 }
 
 function readCache() {
@@ -40,6 +84,26 @@ function readCache() {
 function writeCache(rates) {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify({ rates, fetchedAt: Date.now() }))
+  } catch {
+    // storage quota — ignore
+  }
+}
+
+function readHistoryCache(key) {
+  try {
+    const raw = localStorage.getItem(`${HISTORY_CACHE_KEY}:${key}`)
+    if (!raw) return null
+    const { data, fetchedAt } = JSON.parse(raw)
+    if (Date.now() - fetchedAt > HISTORY_CACHE_TTL) return null
+    return data
+  } catch {
+    return null
+  }
+}
+
+function writeHistoryCache(key, data) {
+  try {
+    localStorage.setItem(`${HISTORY_CACHE_KEY}:${key}`, JSON.stringify({ data, fetchedAt: Date.now() }))
   } catch {
     // storage quota — ignore
   }
@@ -82,6 +146,50 @@ export async function fetchRates() {
   })()
 
   return _inFlight
+}
+
+export async function fetchRateHistory(symbols = SUPPORTED_CURRENCIES.filter((code) => code !== "TRY"), days = 30) {
+  const cleanSymbols = [...new Set(symbols.filter((code) => code && code !== "TRY"))]
+  if (cleanSymbols.length === 0) return []
+
+  const cacheKey = `${days}:${cleanSymbols.sort().join(",")}`
+  const cached = readHistoryCache(cacheKey)
+  if (cached) return cached
+
+  const end = isoDate(new Date())
+  const startDate = new Date()
+  startDate.setDate(startDate.getDate() - Math.max(days + 12, 18))
+  const start = isoDate(startDate)
+  const data = await Promise.all(cleanSymbols.map(async (code) => {
+    try {
+      const querySymbols = code === "EUR" ? "TRY" : `TRY,${code}`
+      const res = await fetch(`https://api.frankfurter.dev/v1/${start}..${end}?base=EUR&symbols=${querySymbols}`)
+      if (!res.ok) throw new Error("Historical rate fetch failed")
+
+      const json = await res.json()
+      const points = Object.keys(json.rates || {}).sort().flatMap((date) => {
+        const dayRates = json.rates[date] || {}
+        const tryPerEur = Number(dayRates.TRY || 0)
+        const quotePerEur = code === "EUR" ? 1 : Number(dayRates[code] || 0)
+        if (!tryPerEur || !quotePerEur) return []
+        return [{
+          date,
+          day: date.slice(5),
+          value: Math.round((tryPerEur / quotePerEur) * 10000) / 10000,
+        }]
+      })
+
+      return { code, points: points.slice(-days) }
+    } catch {
+      return { code, points: [] }
+    }
+  }))
+  writeHistoryCache(cacheKey, data)
+  return data
+}
+
+function isoDate(date) {
+  return date.toISOString().slice(0, 10)
 }
 
 // Convert amount from sourceCurrency to TRY

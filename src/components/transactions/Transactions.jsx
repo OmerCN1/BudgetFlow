@@ -12,6 +12,7 @@ export default function Transactions({
   txs,
   cats,
   receipts = [],
+  creditCards = [],
   catById,
   showModal,
   editTx,
@@ -294,7 +295,7 @@ export default function Transactions({
           </div>
         </Card>
       )}
-      <Card style={{ padding: 0, overflow: "hidden" }}>
+      <Card className="tx-table-card" style={{ padding: 0, overflow: "hidden" }}>
         <table
           style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}
         >
@@ -316,6 +317,7 @@ export default function Transactions({
                   >
                     {i === 0 ? (
                       <input
+                        className="tx-select-checkbox"
                         type="checkbox"
                         checked={allVisibleSelected}
                         onChange={() => setSelectedIds(allVisibleSelected ? [] : filteredTxs.map((tx) => tx.id))}
@@ -341,7 +343,7 @@ export default function Transactions({
                   style={{ borderBottom: `1px solid ${S.border}25` }}
                 >
                   <td style={{ padding: "11px 14px" }}>
-                    <input type="checkbox" checked={selectedSet.has(t.id)} onChange={() => toggleSelect(t.id)} />
+                    <input className="tx-select-checkbox" type="checkbox" checked={selectedSet.has(t.id)} onChange={() => toggleSelect(t.id)} />
                   </td>
                   <td
                     style={{
@@ -491,6 +493,47 @@ export default function Transactions({
           </tbody>
         </table>
 
+        <div className="tx-mobile-list" aria-label="İşlem kartları">
+          {filteredTxs.map((t) => {
+            const c = catById(t.cat)
+            const txReceipts = receiptsByTx.get(t.id) || []
+            return (
+              <article key={t.id} className="tx-mobile-card">
+                <div className="tx-mobile-card-head">
+                  <input
+                    className="tx-select-checkbox"
+                    type="checkbox"
+                    checked={selectedSet.has(t.id)}
+                    onChange={() => toggleSelect(t.id)}
+                    aria-label={`${t.desc || "İşlem"} seç`}
+                  />
+                  <span className="tx-mobile-category-dot" style={{ background: c?.color || S.muted }} />
+                  <div className="tx-mobile-copy">
+                    <strong>{t.desc || "İşlem"}</strong>
+                    <span>{c?.name || "Kategori yok"} · {t.date}</span>
+                  </div>
+                  <b className={t.type === "income" ? "is-income" : "is-expense"}>
+                    {t.type === "income" ? "+" : "-"}{TRY(t.amount)}
+                  </b>
+                </div>
+                <div className="tx-mobile-meta">
+                  <span>{t.paymentMethod || "Kart"}</span>
+                  <span>{t.location || "Mekan yok"}</span>
+                  {txReceipts.length > 0 && (
+                    <button type="button" onClick={() => onOpenReceipt?.(txReceipts[0])}>
+                      Fişi aç
+                    </button>
+                  )}
+                </div>
+                <div className="tx-mobile-actions">
+                  <button type="button" onClick={() => onEdit(t)}>Düzenle</button>
+                  <button type="button" onClick={() => onDelete(t.id)} className="is-danger">Sil</button>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+
         {filteredTxs.length === 0 && (
           <EmptyState
             icon="⇄"
@@ -514,8 +557,8 @@ export default function Transactions({
               style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}
             >
               {[
-                { v: "expense", l: "💸 Gider", c: S.red },
-                { v: "income",  l: "💰 Gelir", c: S.green },
+                { v: "expense", l: "Gider", c: S.red },
+                { v: "income",  l: "Gelir", c: S.green },
               ].map(({ v, l, c }) => (
                 <button
                   key={v}
@@ -623,7 +666,7 @@ export default function Transactions({
             <select
               value={txForm.paymentMethod || "Kart"}
               onChange={(e) =>
-                setTxForm((p) => ({ ...p, paymentMethod: e.target.value }))
+                setTxForm((p) => ({ ...p, paymentMethod: e.target.value, creditCardId: e.target.value === "Kart" ? p.creditCardId : "" }))
               }
               style={inputStyle}
             >
@@ -633,6 +676,23 @@ export default function Transactions({
               <option value="Dijital">Dijital</option>
             </select>
           </div>
+          {txForm.paymentMethod === "Kart" && creditCards.length > 0 && (
+            <div>
+              <FieldLabel>Kredi Kartı</FieldLabel>
+              <select
+                value={txForm.creditCardId || ""}
+                onChange={(e) => setTxForm((p) => ({ ...p, creditCardId: e.target.value }))}
+                style={inputStyle}
+              >
+                <option value="">Kart seçilmedi</option>
+                {creditCards.map((card) => (
+                  <option key={card.id} value={card.id}>
+                    {card.bankName ? `${card.bankName} · ` : ""}{card.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div
             className="modal-date-row"
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}

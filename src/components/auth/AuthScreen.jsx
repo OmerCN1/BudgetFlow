@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react"
 import { supabase } from "../../lib/supabase"
 import { FONT_BODY } from "../../constants/theme"
 
-const BRAND_LOGO_SRC = "/assets/ba_full_png_black.svg"
+const BRAND_LOGO_LIGHT_SRC = "/assets/ba_logo_black.svg"
+const BRAND_LOGO_DARK_SRC = "/assets/ba_logo_white.svg"
 
 
 const IconUser = () => (
@@ -63,11 +64,50 @@ const IconShield = () => (
   </svg>
 )
 
+const IconAssetsPanel = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 19V5" />
+    <path d="M4 19h16" />
+    <rect x="7" y="11" width="3" height="5" rx="0.8" />
+    <rect x="12" y="7" width="3" height="9" rx="0.8" />
+    <rect x="17" y="4" width="3" height="12" rx="0.8" />
+  </svg>
+)
+
+const IconAiCoach = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 3v3" />
+    <path d="M5 12H3" />
+    <path d="M21 12h-2" />
+    <rect x="6" y="7" width="12" height="12" rx="4" />
+    <path d="M9.5 12h.01" />
+    <path d="M14.5 12h.01" />
+    <path d="M9.5 15.5h5" />
+  </svg>
+)
+
+const IconReceiptScan = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M7 3h10v18l-2-1.2-2 1.2-2-1.2-2 1.2-2-1.2V3z" />
+    <path d="M9 8h6" />
+    <path d="M9 12h6" />
+    <path d="M9 16h3" />
+  </svg>
+)
+
+const IconPortfolioTrend = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 18h16" />
+    <path d="M5 15l4-4 4 3 6-7" />
+    <path d="M15 7h4v4" />
+  </svg>
+)
+
 const FEATURES = [
-  { icon: "📊", text: "Tüm varlıklarınızı tek panelden yönetin" },
-  { icon: "🤖", text: "Yapay zeka destekli finansal koçluk" },
-  { icon: "📄", text: "Fiş ve fatura tarama & kategorizasyon" },
-  { icon: "📈", text: "Gerçek zamanlı portföy analizi" },
+  { Icon: IconAssetsPanel, text: "Tüm varlıklarınızı tek panelden yönetin" },
+  { Icon: IconAiCoach, text: "Yapay zeka destekli finansal koçluk" },
+  { Icon: IconReceiptScan, text: "Fiş ve fatura tarama & kategorizasyon" },
+  { Icon: IconPortfolioTrend, text: "Gerçek zamanlı portföy analizi" },
 ]
 
 const SOCIAL_PROVIDERS = [
@@ -84,7 +124,7 @@ function getAuthErrorMessage(authError) {
   return authError.message
 }
 
-export default function AuthScreen({ isConfigured, initialMode = "login", onBackLanding, onOpenPage }) {
+export default function AuthScreen({ isConfigured, initialMode = "login", onBackLanding, onOpenPage, theme = "dark" }) {
   const [mode, setMode] = useState(initialMode)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -97,20 +137,11 @@ export default function AuthScreen({ isConfigured, initialMode = "login", onBack
   const switchTimerRef = useRef(null)
 
   const isSignup = mode === "signup"
+  const brandLogoSrc = theme === "light" ? BRAND_LOGO_LIGHT_SRC : BRAND_LOGO_DARK_SRC
 
   useEffect(() => {
     setMode(initialMode)
   }, [initialMode])
-
-  useEffect(() => {
-    const root = document.documentElement
-    const prev = root.getAttribute("data-theme")
-    root.setAttribute("data-theme", "dark")
-    return () => {
-      if (prev) root.setAttribute("data-theme", prev)
-      else root.removeAttribute("data-theme")
-    }
-  }, [])
 
   useEffect(() => () => clearTimeout(switchTimerRef.current), [])
 
@@ -170,7 +201,7 @@ export default function AuthScreen({ isConfigured, initialMode = "login", onBack
 
         <div className="auth2-panel-content">
           <div className="auth2-brand">
-            <img className="public-brand-logo" src={BRAND_LOGO_SRC} alt="BudgetAssist" />
+            <img className="public-brand-logo" src={brandLogoSrc} alt="BudgetAssist" />
             
           </div>
 
@@ -187,7 +218,7 @@ export default function AuthScreen({ isConfigured, initialMode = "login", onBack
           <ul className="auth2-features">
             {FEATURES.map((f, i) => (
               <li key={i} className="auth2-feature-item" style={{ animationDelay: `${0.1 + i * 0.1}s` }}>
-                <span className="auth2-feature-icon">{f.icon}</span>
+                <span className="auth2-feature-icon"><f.Icon /></span>
                 <span>{f.text}</span>
               </li>
             ))}
@@ -214,8 +245,7 @@ export default function AuthScreen({ isConfigured, initialMode = "login", onBack
               <IconArrowLeft />
             </button>
             <div className="auth2-brand">
-              <div className="auth2-brand-mark"><span style={{color:"#1B3A6B"}}>B</span><span style={{color:"#22B573"}}>A</span></div>
-              <span className="auth2-brand-name">BudgetAssist</span>
+              <img className="public-brand-logo auth2-mobile-logo" src={brandLogoSrc} alt="BudgetAssist" />
             </div>
           </div>
 

@@ -45,7 +45,7 @@ export default function Notifications({
         <div style={{ display: "grid", gap: 10 }}>
           {items.map((item) => (
             <Card key={item.id} className="notification-card-v2" style={{ borderColor: `${toneColor(item.severity)}55`, borderLeft: `3px solid ${toneColor(item.severity)}` }}>
-              <div style={{ display: "grid", gridTemplateColumns: "auto minmax(0,1fr) auto", gap: 14, alignItems: "center" }}>
+              <div className="notifications-item-grid" style={{ display: "grid", gridTemplateColumns: "auto minmax(0,1fr) auto", gap: 14, alignItems: "center" }}>
                 <div
                   style={{
                     width: 42,

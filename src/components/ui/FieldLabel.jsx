@@ -3,6 +3,7 @@ import { S } from "../../constants/theme"
 export default function FieldLabel({ children }) {
   return (
     <div
+      className="field-label"
       style={{
         fontSize: 12,
         fontWeight: 800,

@@ -10,6 +10,21 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.user_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null unique references auth.users(id) on delete cascade,
+  plan_id text not null default 'free' check (plan_id in ('free', 'standard', 'premium')),
+  status text not null default 'active' check (status in ('active', 'trialing', 'past_due', 'canceled')),
+  billing_interval text not null default 'monthly' check (billing_interval in ('monthly', 'yearly')),
+  current_period_start date not null default current_date,
+  current_period_end date,
+  cancel_at_period_end boolean not null default false,
+  provider text not null default 'manual',
+  provider_subscription_id text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.categories (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -41,7 +56,8 @@ alter table public.profiles
   add column if not exists notification_email boolean not null default true,
   add column if not exists notification_push boolean not null default true,
   add column if not exists notification_sms boolean not null default false,
-  add column if not exists phone_number text;
+  add column if not exists phone_number text,
+  add column if not exists avatar_url text;
 
 create table if not exists public.notification_logs (
   id uuid primary key default gen_random_uuid(),
@@ -71,9 +87,12 @@ create index if not exists notification_logs_created_at_idx on public.notificati
 create index if not exists notifications_user_id_idx on public.notifications(user_id);
 create index if not exists notifications_user_unread_idx on public.notifications(user_id, is_read);
 create index if not exists notifications_created_at_idx on public.notifications(created_at);
+create index if not exists user_subscriptions_user_id_idx on public.user_subscriptions(user_id);
+create index if not exists user_subscriptions_plan_status_idx on public.user_subscriptions(plan_id, status);
 
 alter table public.notification_logs enable row level security;
 alter table public.notifications enable row level security;
+alter table public.user_subscriptions enable row level security;
 
 drop policy if exists "Users can read own notification logs" on public.notification_logs;
 create policy "Users can read own notification logs"
@@ -97,6 +116,21 @@ to authenticated
 using ((select auth.uid()) = user_id);
 
 drop policy if exists "Users can update own notifications" on public.notifications;
+
+drop policy if exists "Users can read own subscriptions" on public.user_subscriptions;
+create policy "Users can read own subscriptions"
+on public.user_subscriptions
+for select
+to authenticated
+using ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can manage own manual subscriptions" on public.user_subscriptions;
+create policy "Users can manage own manual subscriptions"
+on public.user_subscriptions
+for all
+to authenticated
+using ((select auth.uid()) = user_id and provider = 'manual')
+with check ((select auth.uid()) = user_id and provider = 'manual');
 
 create or replace function public.mark_notification_read(p_notification_id uuid)
 returns public.notifications
@@ -232,6 +266,29 @@ create unique index if not exists categories_user_name_type_active_uidx
   where is_archived = false;
 create index if not exists transactions_user_id_idx on public.transactions(user_id);
 create index if not exists transactions_category_id_idx on public.transactions(category_id);
+
+with ranked_recurring_duplicates as (
+  select
+    transactions.id,
+    row_number() over (
+      partition by transactions.user_id, transactions.recurring_rule_id, transactions.transaction_date
+      order by
+        case when receipts.id is null then 1 else 0 end,
+        transactions.created_at asc,
+        transactions.id asc
+    ) as duplicate_rank
+  from public.transactions
+  left join public.receipts
+    on receipts.transaction_id = transactions.id
+  where transactions.recurring_rule_id is not null
+)
+delete from public.transactions
+where id in (
+  select id
+  from ranked_recurring_duplicates
+  where duplicate_rank > 1
+);
+
 create unique index if not exists transactions_recurring_rule_date_uidx
   on public.transactions(user_id, recurring_rule_id, transaction_date)
   where recurring_rule_id is not null;
@@ -259,6 +316,20 @@ create index if not exists ai_insights_user_id_idx on public.ai_insights(user_id
 create index if not exists receipts_user_id_idx on public.receipts(user_id);
 create index if not exists receipts_transaction_id_idx on public.receipts(transaction_id);
 
+create table if not exists public.receipt_items (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  receipt_id uuid not null references public.receipts(id) on delete cascade,
+  name text not null,
+  quantity numeric(12, 4) not null default 1 check (quantity >= 0),
+  unit_price numeric(12, 2) not null default 0 check (unit_price >= 0),
+  total_price numeric(12, 2) not null default 0 check (total_price >= 0),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists receipt_items_user_id_idx on public.receipt_items(user_id);
+create index if not exists receipt_items_receipt_id_idx on public.receipt_items(receipt_id);
+
 alter table public.profiles enable row level security;
 alter table public.categories enable row level security;
 alter table public.transactions enable row level security;
@@ -269,6 +340,7 @@ alter table public.ai_conversations enable row level security;
 alter table public.ai_messages enable row level security;
 alter table public.ai_insights enable row level security;
 alter table public.receipts enable row level security;
+alter table public.receipt_items enable row level security;
 
 drop policy if exists "Users can manage their own profiles" on public.profiles;
 create policy "Users can manage their own profiles"
@@ -350,6 +422,30 @@ to authenticated
 using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can manage their own receipt items" on public.receipt_items;
+create policy "Users can manage their own receipt items"
+on public.receipt_items
+for all
+to authenticated
+using (
+  (select auth.uid()) = user_id
+  and exists (
+    select 1
+    from public.receipts
+    where receipts.id = receipt_items.receipt_id
+      and receipts.user_id = (select auth.uid())
+  )
+)
+with check (
+  (select auth.uid()) = user_id
+  and exists (
+    select 1
+    from public.receipts
+    where receipts.id = receipt_items.receipt_id
+      and receipts.user_id = (select auth.uid())
+  )
+);
+
 create table if not exists public.debts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -409,6 +505,19 @@ on conflict (id) do update set
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'avatars',
+  'avatars',
+  false,
+  5242880,
+  array['image/jpeg', 'image/png', 'image/webp', 'image/gif']::text[]
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
 drop policy if exists "Users can read own receipt files" on storage.objects;
 create policy "Users can read own receipt files"
 on storage.objects
@@ -453,6 +562,50 @@ using (
   and (storage.foldername(name))[1] = (select auth.uid())::text
 );
 
+drop policy if exists "Users can read own avatar files" on storage.objects;
+create policy "Users can read own avatar files"
+on storage.objects
+for select
+to authenticated
+using (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
+drop policy if exists "Users can upload own avatar files" on storage.objects;
+create policy "Users can upload own avatar files"
+on storage.objects
+for insert
+to authenticated
+with check (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
+drop policy if exists "Users can update own avatar files" on storage.objects;
+create policy "Users can update own avatar files"
+on storage.objects
+for update
+to authenticated
+using (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+)
+with check (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
+drop policy if exists "Users can delete own avatar files" on storage.objects;
+create policy "Users can delete own avatar files"
+on storage.objects
+for delete
+to authenticated
+using (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
 -- Assets (Varlıklar)
 create table if not exists public.assets (
   id uuid primary key default gen_random_uuid(),
@@ -469,9 +622,45 @@ create table if not exists public.assets (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.asset_transactions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  asset_id uuid not null references public.assets(id) on delete cascade,
+  transaction_type text not null check (transaction_type in ('buy', 'sell', 'deposit', 'withdraw')),
+  quantity numeric(18, 6) not null check (quantity > 0),
+  unit_price numeric(18, 4) not null default 0 check (unit_price >= 0),
+  total_amount numeric(18, 2) not null default 0 check (total_amount >= 0),
+  fee numeric(12, 2) not null default 0 check (fee >= 0),
+  transaction_date date not null default current_date,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.asset_price_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  asset_id uuid not null references public.assets(id) on delete cascade,
+  snapshot_date date not null default current_date,
+  asset_type text not null,
+  price_try numeric(18, 4),
+  quantity numeric(18, 6) not null default 0,
+  total_value_try numeric(18, 2) not null default 0,
+  source text not null default 'client-market',
+  created_at timestamptz not null default now(),
+  unique (user_id, asset_id, snapshot_date)
+);
+
 create index if not exists assets_user_id_idx on public.assets(user_id);
+create index if not exists asset_transactions_user_id_idx on public.asset_transactions(user_id);
+create index if not exists asset_transactions_asset_id_idx on public.asset_transactions(asset_id);
+create index if not exists asset_transactions_date_idx on public.asset_transactions(transaction_date);
+create index if not exists asset_price_snapshots_user_id_idx on public.asset_price_snapshots(user_id);
+create index if not exists asset_price_snapshots_asset_id_idx on public.asset_price_snapshots(asset_id);
+create index if not exists asset_price_snapshots_date_idx on public.asset_price_snapshots(snapshot_date);
 
 alter table public.assets enable row level security;
+alter table public.asset_transactions enable row level security;
+alter table public.asset_price_snapshots enable row level security;
 
 drop policy if exists "Users can manage their own assets" on public.assets;
 create policy "Users can manage their own assets"
@@ -480,6 +669,54 @@ for all
 to authenticated
 using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can manage their own asset transactions" on public.asset_transactions;
+create policy "Users can manage their own asset transactions"
+on public.asset_transactions
+for all
+to authenticated
+using (
+  (select auth.uid()) = user_id
+  and exists (
+    select 1
+    from public.assets
+    where assets.id = asset_transactions.asset_id
+      and assets.user_id = (select auth.uid())
+  )
+)
+with check (
+  (select auth.uid()) = user_id
+  and exists (
+    select 1
+    from public.assets
+    where assets.id = asset_transactions.asset_id
+      and assets.user_id = (select auth.uid())
+  )
+);
+
+drop policy if exists "Users can manage their own asset price snapshots" on public.asset_price_snapshots;
+create policy "Users can manage their own asset price snapshots"
+on public.asset_price_snapshots
+for all
+to authenticated
+using (
+  (select auth.uid()) = user_id
+  and exists (
+    select 1
+    from public.assets
+    where assets.id = asset_price_snapshots.asset_id
+      and assets.user_id = (select auth.uid())
+  )
+)
+with check (
+  (select auth.uid()) = user_id
+  and exists (
+    select 1
+    from public.assets
+    where assets.id = asset_price_snapshots.asset_id
+      and assets.user_id = (select auth.uid())
+  )
+);
 
 -- Kredi Kartları
 create table if not exists public.credit_cards (
@@ -499,9 +736,78 @@ create table if not exists public.credit_cards (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.credit_card_statements (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  credit_card_id uuid not null references public.credit_cards(id) on delete cascade,
+  period_start date not null,
+  period_end date not null,
+  statement_date date not null,
+  due_date date not null,
+  total_amount numeric(12, 2) not null default 0 check (total_amount >= 0),
+  min_payment_amount numeric(12, 2) not null default 0 check (min_payment_amount >= 0),
+  paid_amount numeric(12, 2) not null default 0 check (paid_amount >= 0),
+  status text not null default 'open' check (status in ('open', 'partial', 'paid', 'overdue')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, credit_card_id, statement_date)
+);
+
+create table if not exists public.credit_card_payments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  credit_card_id uuid not null references public.credit_cards(id) on delete cascade,
+  statement_id uuid references public.credit_card_statements(id) on delete set null,
+  amount numeric(12, 2) not null check (amount > 0),
+  payment_date date not null default current_date,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.transactions
+  add column if not exists credit_card_id uuid,
+  add column if not exists credit_card_statement_id uuid;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'transactions_credit_card_id_fkey'
+      and conrelid = 'public.transactions'::regclass
+  ) then
+    alter table public.transactions
+      add constraint transactions_credit_card_id_fkey
+      foreign key (credit_card_id)
+      references public.credit_cards(id)
+      on delete set null;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'transactions_credit_card_statement_id_fkey'
+      and conrelid = 'public.transactions'::regclass
+  ) then
+    alter table public.transactions
+      add constraint transactions_credit_card_statement_id_fkey
+      foreign key (credit_card_statement_id)
+      references public.credit_card_statements(id)
+      on delete set null;
+  end if;
+end $$;
+
 create index if not exists credit_cards_user_id_idx on public.credit_cards(user_id);
+create index if not exists credit_card_statements_user_id_idx on public.credit_card_statements(user_id);
+create index if not exists credit_card_statements_card_id_idx on public.credit_card_statements(credit_card_id);
+create index if not exists credit_card_statements_due_date_idx on public.credit_card_statements(due_date);
+create index if not exists credit_card_payments_user_id_idx on public.credit_card_payments(user_id);
+create index if not exists credit_card_payments_card_id_idx on public.credit_card_payments(credit_card_id);
+create index if not exists transactions_credit_card_id_idx on public.transactions(credit_card_id);
 
 alter table public.credit_cards enable row level security;
+alter table public.credit_card_statements enable row level security;
+alter table public.credit_card_payments enable row level security;
 
 drop policy if exists "Users can manage their own credit cards" on public.credit_cards;
 create policy "Users can manage their own credit cards"
@@ -510,6 +816,54 @@ for all
 to authenticated
 using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can manage their own credit card statements" on public.credit_card_statements;
+create policy "Users can manage their own credit card statements"
+on public.credit_card_statements
+for all
+to authenticated
+using (
+  (select auth.uid()) = user_id
+  and exists (
+    select 1
+    from public.credit_cards
+    where credit_cards.id = credit_card_statements.credit_card_id
+      and credit_cards.user_id = (select auth.uid())
+  )
+)
+with check (
+  (select auth.uid()) = user_id
+  and exists (
+    select 1
+    from public.credit_cards
+    where credit_cards.id = credit_card_statements.credit_card_id
+      and credit_cards.user_id = (select auth.uid())
+  )
+);
+
+drop policy if exists "Users can manage their own credit card payments" on public.credit_card_payments;
+create policy "Users can manage their own credit card payments"
+on public.credit_card_payments
+for all
+to authenticated
+using (
+  (select auth.uid()) = user_id
+  and exists (
+    select 1
+    from public.credit_cards
+    where credit_cards.id = credit_card_payments.credit_card_id
+      and credit_cards.user_id = (select auth.uid())
+  )
+)
+with check (
+  (select auth.uid()) = user_id
+  and exists (
+    select 1
+    from public.credit_cards
+    where credit_cards.id = credit_card_payments.credit_card_id
+      and credit_cards.user_id = (select auth.uid())
+  )
+);
 
 -- ─── ADMIN PANEL MIGRATION ────────────────────────────────────────────────────
 

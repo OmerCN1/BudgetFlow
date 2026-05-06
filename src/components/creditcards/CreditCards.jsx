@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useCallback } from "react"
 import Card from "../ui/Card"
 import FieldLabel from "../ui/FieldLabel"
 import { S, FONT_MONO, inputStyle, btnGhost, btnPrimary, btnDanger, PALETTE } from "../../constants/theme"
-import { TRY } from "../../utils/helpers"
+import { TRY, today } from "../../utils/helpers"
 
 const CARD_TYPES = ["Visa", "Mastercard", "Amex", "Troy", "Diğer"]
 const CARD_COLORS = [
@@ -20,6 +20,14 @@ const emptyForm = {
   dueDay: "15",
   minPaymentRate: "3",
   color: "#4edea3",
+}
+
+const emptyPaymentForm = {
+  creditCardId: "",
+  statementId: "",
+  amount: "",
+  paymentDate: today(),
+  note: "",
 }
 
 function daysUntil(dayOfMonth) {
@@ -74,6 +82,7 @@ function PhysicalCard({ card, isSelected, onClick }) {
 
   return (
     <div
+      className="creditcards-info-panel"
       style={{
         perspective: 900,
         width: "100%",
@@ -347,7 +356,7 @@ function CardInfoPanel({ card, onEdit, onDelete }) {
       <InfoChip label="Son Ödeme" value={`${card.dueDay}. gün`} sub={`${dueDays} gün kaldı`} color={dueDays <= 3 ? S.red : dueDays <= 7 ? S.amber : S.cyan} />
       <InfoChip label="Asgari Ödeme" value={TRY(minPayment)} sub={`%${card.minPaymentRate} oran`} color={S.amber} />
 
-      <div style={{ gridColumn: "1 / -1", display: "flex", gap: 10, alignItems: "center", justifyContent: "flex-end", paddingTop: 4 }}>
+      <div className="creditcards-info-actions" style={{ gridColumn: "1 / -1", display: "flex", gap: 10, alignItems: "center", justifyContent: "flex-end", paddingTop: 4 }}>
         <button style={{ ...btnGhost, fontSize: 13 }} onClick={onEdit}>Düzenle</button>
         <button style={{ ...btnDanger, fontSize: 13 }} onClick={onDelete}>Sil</button>
       </div>
@@ -367,8 +376,9 @@ function InfoChip({ label, value, sub, color }) {
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export default function CreditCards({ creditCards = [], onSave, onDelete }) {
+export default function CreditCards({ creditCards = [], txs = [], statements = [], payments = [], onSave, onDelete, onSavePayment }) {
   const [form, setForm] = useState(emptyForm)
+  const [paymentForm, setPaymentForm] = useState(emptyPaymentForm)
   const [editingId, setEditingId] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
   const [showForm, setShowForm] = useState(false)
@@ -424,13 +434,41 @@ export default function CreditCards({ creditCards = [], onSave, onDelete }) {
   }
 
   const selected = creditCards.find((c) => c.id === selectedId)
+  const statementRows = useMemo(
+    () => buildCardStatements(creditCards, txs, payments, statements),
+    [creditCards, txs, payments, statements]
+  )
+  const upcomingStatements = statementRows.filter((row) => row.status !== "paid").slice(0, 6)
+  const recentPayments = payments.slice(0, 5)
+
+  const savePayment = () => {
+    const cardId = paymentForm.creditCardId || creditCards[0]?.id || ""
+    if (!cardId || !paymentForm.amount || !onSavePayment) return
+    const selectedStatement = statementRows.find((row) => row.id === paymentForm.statementId)
+    onSavePayment({
+      ...paymentForm,
+      creditCardId: cardId,
+      statementId: selectedStatement?.persistedId || "",
+      statementDraft: selectedStatement && !selectedStatement.persistedId ? {
+        creditCardId: selectedStatement.creditCardId,
+        periodStart: selectedStatement.periodStart,
+        periodEnd: selectedStatement.periodEnd,
+        statementDate: selectedStatement.statementDate,
+        dueDate: selectedStatement.dueDate,
+        totalAmount: selectedStatement.totalAmount,
+        minPaymentAmount: selectedStatement.minPaymentAmount,
+      } : null,
+      amount: parseFloat(paymentForm.amount),
+    })
+    setPaymentForm({ ...emptyPaymentForm, creditCardId: cardId })
+  }
 
   return (
-    <div style={{ maxWidth: 920, margin: "0 auto", padding: "0 0 48px" }}>
+    <div className="creditcards-page" style={{ maxWidth: 920, margin: "0 auto", padding: "0 0 48px" }}>
 
       {/* Summary bar */}
       {creditCards.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 28 }}>
+        <div className="creditcards-summary-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 28 }}>
           <SummaryTile label="Toplam Borç" value={TRY(totalDebt)} color={S.red} />
           <SummaryTile label="Toplam Limit" value={TRY(totalLimit)} color={S.cyan} />
           <SummaryTile label="Asgari Ödemeler" value={TRY(totalMin)} color={S.amber} />
@@ -455,6 +493,7 @@ export default function CreditCards({ creditCards = [], onSave, onDelete }) {
       {creditCards.length > 0 && (
         <>
           <div
+            className="creditcards-card-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
@@ -488,6 +527,114 @@ export default function CreditCards({ creditCards = [], onSave, onDelete }) {
         </>
       )}
 
+      {creditCards.length > 0 && (
+        <Card style={{ marginTop: 18, marginBottom: 20, padding: 16 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+            <FieldLabel>Ekstre ve Ödeme</FieldLabel>
+            <span style={{ color: S.muted, fontSize: 11 }}>
+              {upcomingStatements.length > 0 ? `${upcomingStatements.length} açık ekstre` : "Kart işlemleriyle oluşur"}
+            </span>
+          </div>
+          <div className="creditcards-statement-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.05fr) minmax(280px, 0.95fr)", gap: 14, alignItems: "start" }}>
+            <div>
+              {upcomingStatements.length === 0 ? (
+                <div className="glass-card" style={{ padding: "12px 14px", color: S.muted, fontSize: 13 }}>
+                  Kredi kartına bağlı harcama eklenince ekstreler burada listelenir.
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {upcomingStatements.slice(0, 4).map((statement) => (
+                    <div key={statement.id} className="glass-card" style={{ padding: "9px 11px", display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <strong style={{ color: S.text, fontSize: 13 }}>{statement.cardName}</strong>
+                        <div style={{ color: S.muted, fontSize: 10 }}>
+                          {statement.periodStart} - {statement.periodEnd} · {statement.dueDate}
+                        </div>
+                        <div style={{ color: S.sub, fontSize: 10, marginTop: 1 }}>
+                          Ödenen {TRY(statement.paidAmount)} · {statement.statusLabel}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div className="finance-number" style={{ color: statement.remaining > 0 ? S.red : S.green, fontFamily: FONT_MONO, fontWeight: 800, fontSize: 13 }}>
+                          {TRY(statement.remaining)}
+                        </div>
+                        <small style={{ color: S.muted, fontSize: 10 }}>Asgari {TRY(statement.minPaymentAmount)}</small>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <div style={{ display: "grid", gap: 8 }}>
+                <div className="creditcards-payment-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <select
+                    style={{ ...inputStyle, minHeight: 42, padding: "10px 12px" }}
+                    value={paymentForm.creditCardId || creditCards[0]?.id || ""}
+                    onChange={(e) => setPaymentForm((p) => ({ ...p, creditCardId: e.target.value, statementId: "" }))}
+                  >
+                    {creditCards.map((card) => <option key={card.id} value={card.id}>{card.name}</option>)}
+                  </select>
+                  <select
+                    style={{ ...inputStyle, minHeight: 42, padding: "10px 12px" }}
+                    value={paymentForm.statementId}
+                    onChange={(e) => setPaymentForm((p) => ({ ...p, statementId: e.target.value }))}
+                  >
+                    <option value="">Ekstreye bağlama</option>
+                    {statementRows
+                      .filter((row) => row.creditCardId === (paymentForm.creditCardId || creditCards[0]?.id))
+                      .slice(0, 8)
+                      .map((row) => (
+                        <option key={row.id} value={row.id}>
+                          {row.statementDate} · {TRY(row.remaining)} kalan
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="creditcards-payment-row" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <input
+                    style={{ ...inputStyle, minHeight: 42, padding: "10px 12px" }}
+                    type="number"
+                    min="0"
+                    placeholder="Tutar"
+                    value={paymentForm.amount}
+                    onChange={(e) => setPaymentForm((p) => ({ ...p, amount: e.target.value }))}
+                  />
+                  <input
+                    style={{ ...inputStyle, minHeight: 42, padding: "10px 12px" }}
+                    type="date"
+                    value={paymentForm.paymentDate}
+                    onChange={(e) => setPaymentForm((p) => ({ ...p, paymentDate: e.target.value }))}
+                  />
+                </div>
+                <div className="creditcards-payment-row" style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+                  <input
+                    style={{ ...inputStyle, minHeight: 42, padding: "10px 12px" }}
+                    placeholder="Not"
+                    value={paymentForm.note}
+                    onChange={(e) => setPaymentForm((p) => ({ ...p, note: e.target.value }))}
+                  />
+                  <button style={{ ...btnPrimary, minHeight: 42, padding: "0 18px", whiteSpace: "nowrap" }} onClick={savePayment}>Ödeme Kaydet</button>
+                </div>
+                {recentPayments.length > 0 && (
+                  <div style={{ display: "grid", gap: 4, marginTop: 2 }}>
+                    {recentPayments.slice(0, 3).map((payment) => {
+                      const card = creditCards.find((item) => item.id === payment.creditCardId)
+                      return (
+                        <div key={payment.id} style={{ display: "flex", justifyContent: "space-between", color: S.muted, fontSize: 11 }}>
+                          <span>{card?.name || "Kart"} · {payment.paymentDate}</span>
+                          <strong style={{ color: S.green }}>{TRY(payment.amount)}</strong>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Form */}
       {showForm && (
         <Card style={{ marginTop: creditCards.length > 0 ? 28 : 0 }}>
@@ -496,7 +643,7 @@ export default function CreditCards({ creditCards = [], onSave, onDelete }) {
           </div>
 
           {/* Live preview */}
-          <div style={{ marginBottom: 24, maxWidth: 340 }}>
+          <div className="creditcards-preview-wrap" style={{ marginBottom: 24, maxWidth: 340 }}>
             <PhysicalCard
               card={{
                 name: form.name || "Kart Adı",
@@ -516,7 +663,7 @@ export default function CreditCards({ creditCards = [], onSave, onDelete }) {
             <div style={{ textAlign: "center", marginTop: 6, fontSize: 11, color: S.muted }}>Önizleme</div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>
+          <div className="creditcards-form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>
             <div style={{ gridColumn: "1 / -1" }}>
               <FieldLabel>Kart Adı *</FieldLabel>
               <input style={inputStyle} placeholder="örn: Akbank Axess" value={form.name}
@@ -585,7 +732,7 @@ export default function CreditCards({ creditCards = [], onSave, onDelete }) {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+          <div className="creditcards-form-actions" style={{ display: "flex", gap: 10, marginTop: 22 }}>
             <button style={btnPrimary} onClick={save}>{editingId ? "Güncelle" : "Kaydet"}</button>
             <button style={btnGhost} onClick={reset}>İptal</button>
           </div>
@@ -606,4 +753,92 @@ function SummaryTile({ label, value, color }) {
       </div>
     </div>
   )
+}
+
+function buildCardStatements(cards, txs, payments, persistedStatements) {
+  const persistedByKey = new Map(
+    persistedStatements.map((statement) => [
+      `${statement.creditCardId}:${statement.statementDate}`,
+      statement,
+    ])
+  )
+  const paidByStatement = new Map()
+  const paidByCard = new Map()
+  payments.forEach((payment) => {
+    if (payment.statementId) paidByStatement.set(payment.statementId, (paidByStatement.get(payment.statementId) || 0) + payment.amount)
+    paidByCard.set(payment.creditCardId, (paidByCard.get(payment.creditCardId) || 0) + payment.amount)
+  })
+
+  return cards
+    .flatMap((card) => {
+      const cardTxs = txs.filter((tx) => tx.creditCardId === card.id && tx.type === "expense")
+      const periods = new Map()
+      cardTxs.forEach((tx) => {
+        const period = statementPeriodFor(tx.date, card.statementDay, card.dueDay)
+        const key = period.statementDate
+        const current = periods.get(key) || { ...period, amount: 0, txCount: 0 }
+        current.amount += tx.amount
+        current.txCount += 1
+        periods.set(key, current)
+      })
+
+      return [...periods.values()].map((period) => {
+        const persisted = persistedByKey.get(`${card.id}:${period.statementDate}`)
+        const paidAmount = persisted
+          ? Math.max(persisted.paidAmount, paidByStatement.get(persisted.id) || 0)
+          : 0
+        const totalAmount = persisted?.totalAmount || period.amount
+        const remaining = Math.max(totalAmount - paidAmount, 0)
+        const status = remaining <= 0 ? "paid" : new Date(period.dueDate) < new Date(today()) ? "overdue" : paidAmount > 0 ? "partial" : "open"
+        return {
+          id: persisted?.id || `${card.id}-${period.statementDate}`,
+          persistedId: persisted?.id || "",
+          creditCardId: card.id,
+          cardName: card.name,
+          periodStart: period.periodStart,
+          periodEnd: period.periodEnd,
+          statementDate: period.statementDate,
+          dueDate: period.dueDate,
+          totalAmount,
+          minPaymentAmount: persisted?.minPaymentAmount || (totalAmount * card.minPaymentRate) / 100,
+          paidAmount,
+          remaining,
+          status,
+          statusLabel: status === "paid" ? "Ödendi" : status === "partial" ? "Kısmi" : status === "overdue" ? "Gecikti" : "Açık",
+          txCount: period.txCount,
+        }
+      })
+    })
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+}
+
+function statementPeriodFor(txDate, statementDay, dueDay) {
+  const date = new Date(`${txDate}T12:00:00`)
+  const y = date.getFullYear()
+  const m = date.getMonth()
+  const currentStatement = new Date(y, m, clampDay(y, m, statementDay))
+  const statementDate = date <= currentStatement
+    ? currentStatement
+    : new Date(y, m + 1, clampDay(y, m + 1, statementDay))
+  const previousStatement = new Date(statementDate)
+  previousStatement.setMonth(previousStatement.getMonth() - 1)
+  previousStatement.setDate(clampDay(previousStatement.getFullYear(), previousStatement.getMonth(), statementDay) + 1)
+  const periodEnd = new Date(statementDate)
+  const dueDate = new Date(statementDate.getFullYear(), statementDate.getMonth(), clampDay(statementDate.getFullYear(), statementDate.getMonth(), dueDay))
+  if (dueDate <= statementDate) dueDate.setMonth(dueDate.getMonth() + 1)
+
+  return {
+    periodStart: isoDate(previousStatement),
+    periodEnd: isoDate(periodEnd),
+    statementDate: isoDate(statementDate),
+    dueDate: isoDate(dueDate),
+  }
+}
+
+function clampDay(year, month, day) {
+  return Math.min(Math.max(Number(day) || 1, 1), new Date(year, month + 1, 0).getDate())
+}
+
+function isoDate(date) {
+  return date.toISOString().slice(0, 10)
 }

@@ -1,18 +1,169 @@
 import { useState, useEffect, useRef } from "react"
 import { S, FONT_BODY, FONT_MONO, btnPrimary, btnGhost } from "../../constants/theme"
 
-const BRAND_LOGO_SRC = "/assets/ba_full_png_black.svg"
+const BRAND_LOGO_LIGHT_SRC = "/assets/ba_logo_black.svg"
+const BRAND_LOGO_DARK_SRC = "/assets/ba_logo_white.svg"
+
+const iconProps = {
+  width: 20,
+  height: 20,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+  "aria-hidden": "true",
+}
+
+const IconIncomeExpense = () => (
+  <svg {...iconProps}>
+    <path d="M4 18V6" />
+    <path d="M4 18h16" />
+    <path d="m7 14 3-3 3 2 5-6" />
+    <path d="M15 7h3v3" />
+  </svg>
+)
+
+const IconAiCoach = () => (
+  <svg {...iconProps}>
+    <path d="M12 3v3" />
+    <path d="M5 12H3" />
+    <path d="M21 12h-2" />
+    <rect x="6" y="7" width="12" height="12" rx="4" />
+    <path d="M9.5 12h.01" />
+    <path d="M14.5 12h.01" />
+    <path d="M9.5 15.5h5" />
+  </svg>
+)
+
+const IconReports = () => (
+  <svg {...iconProps}>
+    <path d="M4 19V5" />
+    <path d="M4 19h16" />
+    <rect x="7" y="11" width="3" height="5" rx="1" />
+    <rect x="12" y="7" width="3" height="9" rx="1" />
+    <rect x="17" y="9" width="3" height="7" rx="1" />
+  </svg>
+)
+
+const IconCreditCard = () => (
+  <svg {...iconProps}>
+    <rect x="3" y="5" width="18" height="14" rx="3" />
+    <path d="M3 10h18" />
+    <path d="M7 15h4" />
+    <path d="M15 15h2" />
+  </svg>
+)
+
+const IconDebt = () => (
+  <svg {...iconProps}>
+    <path d="M7 8h10" />
+    <path d="M7 12h7" />
+    <path d="M7 16h5" />
+    <path d="M18 14l2 2-2 2" />
+    <path d="M20 16h-5" />
+    <rect x="4" y="4" width="16" height="16" rx="3" />
+  </svg>
+)
+
+const IconAssets = () => (
+  <svg {...iconProps}>
+    <path d="M4 11 12 4l8 7" />
+    <path d="M6 10v9h12v-9" />
+    <path d="M10 19v-5h4v5" />
+  </svg>
+)
+
+const IconRecurring = () => (
+  <svg {...iconProps}>
+    <path d="M17 2v5h-5" />
+    <path d="M7 22v-5h5" />
+    <path d="M20 11a8 8 0 0 0-13.6-5.6L4 8" />
+    <path d="M4 13a8 8 0 0 0 13.6 5.6L20 16" />
+  </svg>
+)
+
+const IconGoals = () => (
+  <svg {...iconProps}>
+    <circle cx="12" cy="12" r="8" />
+    <circle cx="12" cy="12" r="4" />
+    <path d="m16 8 3-3" />
+    <path d="M19 5h2" />
+    <path d="M19 5V3" />
+  </svg>
+)
+
+const IconReceipts = () => (
+  <svg {...iconProps}>
+    <path d="M7 3h10v18l-2-1.2-2 1.2-2-1.2-2 1.2-2-1.2V3z" />
+    <path d="M9 8h6" />
+    <path d="M9 12h6" />
+    <path d="M9 16h3" />
+  </svg>
+)
+
+const IconConnect = () => (
+  <svg {...iconProps}>
+    <rect x="3" y="6" width="18" height="12" rx="3" />
+    <path d="M7 10h6" />
+    <path d="M7 14h3" />
+    <path d="M16 10l2 2-2 2" />
+  </svg>
+)
+
+const IconTrack = () => (
+  <svg {...iconProps}>
+    <path d="M4 19V5" />
+    <path d="M4 19h16" />
+    <path d="M7 15h2" />
+    <path d="M11 12h2" />
+    <path d="M15 8h2" />
+  </svg>
+)
+
+const IconShield = () => (
+  <svg {...iconProps}>
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    <path d="m9 12 2 2 4-4" />
+  </svg>
+)
+
+const IconLock = () => (
+  <svg {...iconProps}>
+    <rect x="4" y="11" width="16" height="10" rx="2" />
+    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+  </svg>
+)
+
+const IconControl = () => (
+  <svg {...iconProps}>
+    <path d="M4 7h10" />
+    <path d="M4 17h10" />
+    <circle cx="17" cy="7" r="3" />
+    <circle cx="17" cy="17" r="3" />
+  </svg>
+)
+
+const IconSupport = () => (
+  <svg {...iconProps}>
+    <path d="M4 12a8 8 0 0 1 16 0" />
+    <path d="M4 12v3a2 2 0 0 0 2 2h1v-5H4z" />
+    <path d="M20 12v3a2 2 0 0 1-2 2h-1v-5h3z" />
+    <path d="M13 19h2a3 3 0 0 0 3-3" />
+  </svg>
+)
 
 const FEATURES = [
   {
-    icon: "↗",
+    Icon: IconIncomeExpense,
     color: S.green,
     title: "Gelir & Gider Takibi",
     desc: "Tüm işlemlerinizi otomatik kategorize edin. Gerçek zamanlı bakiye ve nakit akışı görünümüyle her zaman bir adım önde olun.",
     tag: "Temel",
   },
   {
-    icon: "✦",
+    Icon: IconAiCoach,
     color: S.cyan,
     title: "AI Finansal Koç",
     desc: "Kişisel harcama alışkanlıklarınızı öğrenen yapay zeka, size özel tasarruf önerileri ve risk uyarıları sunar.",
@@ -20,14 +171,14 @@ const FEATURES = [
     highlight: true,
   },
   {
-    icon: "▥",
+    Icon: IconReports,
     color: S.green,
     title: "Detaylı Raporlar",
     desc: "Aylık trendler, kategori dağılımı ve nakit akışı grafikleriyle finansal durumunuzu net görün.",
     tag: "Standart",
   },
   {
-    icon: "◈",
+    Icon: IconCreditCard,
     color: S.cyan,
     title: "Kredi Kartı Takibi",
     desc: "Birden fazla kredi kartınızı tek ekranda yönetin. Limit kullanımı, ekstre tarihleri ve borç durumunu takip edin.",
@@ -35,7 +186,7 @@ const FEATURES = [
     new: true,
   },
   {
-    icon: "⊙",
+    Icon: IconDebt,
     color: S.green,
     title: "Borç Yönetimi",
     desc: "Verdiğiniz ve aldığınız borçları takip edin. Otomatik hatırlatmalar ve ödeme planlamasıyla hiçbir borcu kaçırmayın.",
@@ -43,7 +194,7 @@ const FEATURES = [
     new: true,
   },
   {
-    icon: "◎",
+    Icon: IconAssets,
     color: S.cyan,
     title: "Varlık Takibi",
     desc: "Gayrimenkul, araç, yatırım ve diğer varlıklarınızı tek platformda izleyin. Net değerinizi her an bilin.",
@@ -51,21 +202,21 @@ const FEATURES = [
     new: true,
   },
   {
-    icon: "⟲",
+    Icon: IconRecurring,
     color: S.green,
     title: "Tekrarlayan İşlemler",
     desc: "Kira, fatura, abonelik gibi düzenli ödemelerinizi otomatikleştirin. Hiçbir ödemeyi kaçırmazsınız.",
     tag: "Standart",
   },
   {
-    icon: "◉",
+    Icon: IconGoals,
     color: S.cyan,
     title: "Hedef & Birikim",
     desc: "Finansal hedeflerinizi belirleyin, ilerlemenizi takip edin. Tatil, araba, ev — her hayalinizi planlayın.",
     tag: "Standart",
   },
   {
-    icon: "⊞",
+    Icon: IconReceipts,
     color: S.green,
     title: "Fiş & Fatura Arşivi",
     desc: "Kamera ile fişlerinizi tarayın, AI otomatik doldurun. Tüm belgeleriniz bulutta güvende.",
@@ -119,6 +270,102 @@ const TESTIMONIALS = [
     role: "Finans Uzmanı",
     avatar: "AŞ",
   },
+  {
+    text: "Fiş tarama özelliği muhasebe işimi ciddi şekilde rahatlattı. Harcamalarım artık kategorilere otomatik düşüyor.",
+    name: "Kerem B.",
+    role: "Kafe İşletmecisi",
+    avatar: "KB",
+  },
+  {
+    text: "Varlık ve borçlarımı aynı panelde görmek finansal durumumu çok daha net anlamamı sağladı.",
+    name: "Selin A.",
+    role: "Ürün Yöneticisi",
+    avatar: "SA",
+  },
+  {
+    text: "Hedef takibi sayesinde tatil bütçemi ilk kez dağılmadan tamamladım. Uyarılar tam zamanında geliyor.",
+    name: "Tolga E.",
+    role: "Tasarımcı",
+    avatar: "TE",
+  },
+  {
+    text: "Kredi kartı limitleri ve ekstre tarihleri tek ekranda olunca ay sonu sürprizleri bitti.",
+    name: "Derya N.",
+    role: "Satış Müdürü",
+    avatar: "DN",
+  },
+  {
+    text: "AI koçun abonelik önerileriyle kullanmadığım servisleri temizledim. İlk haftadan fark ettirdi.",
+    name: "Mert Y.",
+    role: "Serbest Çalışan",
+    avatar: "MY",
+  },
+]
+
+const HOW_IT_WORKS = [
+  {
+    Icon: IconConnect,
+    step: "01",
+    title: "Bağla",
+    desc: "Hesabınızı oluşturun, gelir-gider kategorilerinizi ve ilk finansal hedeflerinizi dakikalar içinde tanımlayın.",
+    stat: "3 dk",
+  },
+  {
+    Icon: IconTrack,
+    step: "02",
+    title: "Takip Et",
+    desc: "Varlık, borç, kart limiti ve tekrar eden ödemeleri tek panelde canlı bir finans akışına dönüştürün.",
+    stat: "Tek panel",
+  },
+  {
+    Icon: IconAiCoach,
+    step: "03",
+    title: "AI Öneri Al",
+    desc: "AI koç harcama alışkanlıklarınızı analiz eder, tasarruf fırsatlarını ve riskleri anlaşılır önerilere çevirir.",
+    stat: "%23 tasarruf",
+  },
+]
+
+const SECURITY_POINTS = [
+  {
+    Icon: IconLock,
+    title: "Şifreli altyapı",
+    desc: "Hassas oturum ve veri akışları modern güvenlik pratikleriyle korunur.",
+  },
+  {
+    Icon: IconControl,
+    title: "Veri kontrolü sizde",
+    desc: "Hesap, işlem ve arşiv verilerinizi istediğiniz zaman yönetebilirsiniz.",
+  },
+  {
+    Icon: IconShield,
+    title: "Güvenli finans deneyimi",
+    desc: "Gizlilik, erişim ve hesap güvenliği landing akışının merkezinde tutulur.",
+  },
+  {
+    Icon: IconSupport,
+    title: "Destek hazır",
+    desc: "Kurulum, güvenlik veya hesap sorularında iletişim kanalları açık kalır.",
+  },
+]
+
+const FAQS = [
+  {
+    q: "Ücretsiz planla başlayabilir miyim?",
+    a: "Evet. Temel gelir-gider takibiyle başlayabilir, ihtiyaçlarınız arttığında Standart veya Premium plana geçebilirsiniz.",
+  },
+  {
+    q: "Kredi kartı bilgilerim gerekiyor mu?",
+    a: "Ücretsiz hesap oluşturmak için kredi kartı gerekmez. Plan seçimini daha sonra yapabilirsiniz.",
+  },
+  {
+    q: "AI koç neyi analiz eder?",
+    a: "Harcama eğilimlerinizi, aboneliklerinizi, bütçe risklerini ve tasarruf fırsatlarını anlaşılır önerilere dönüştürür.",
+  },
+  {
+    q: "Verilerimi sonradan yönetebilir miyim?",
+    a: "Evet. İşlem, fiş, hedef ve hesap bilgilerinizi panel üzerinden düzenleyebilir veya kaldırabilirsiniz.",
+  },
 ]
 
 const STATS = [
@@ -128,22 +375,41 @@ const STATS = [
   { value: "4.9/5", label: "App Store Puanı", color: S.cyan },
 ]
 
-export default function LandingPage({ onLogin, onSignup, onOpenPage }) {
+const HERO_CHART_TREND =
+  "M0,72 C0.18,72 0.32,72 0.5,72 C0.84,70 1.16,64 1.5,64 C1.84,64 2.16,56 2.5,56 C2.84,56 3.16,62 3.5,62 C3.84,62 4.16,46 4.5,46 C4.84,46 5.16,38 5.5,38 C5.84,38 6.16,42 6.5,42 C6.84,42 7.16,30 7.5,30 C7.84,30 8.16,20 8.5,20 C8.84,20 9.16,26 9.5,26 C9.84,26 10.16,12 10.5,12 C10.84,12 11.16,4 11.5,4 C11.68,4 11.82,4 12,4"
+const HERO_CHART_AREA = `${HERO_CHART_TREND} L12,100 L0,100 Z`
+const HERO_TOTAL_AMOUNT = 284750
+const formatHeroTotal = (value) => `₺${Math.round(value).toLocaleString("tr-TR")},00`
+
+export default function LandingPage({ onLogin, onSignup, onOpenPage, theme = "dark" }) {
   const [billing, setBilling] = useState("yearly")
   const [activeFeature, setActiveFeature] = useState(0)
+  const [heroTotal, setHeroTotal] = useState(0)
   const yearly = billing === "yearly"
   const navRef = useRef(null)
+  const brandLogoSrc = theme === "light" ? BRAND_LOGO_LIGHT_SRC : BRAND_LOGO_DARK_SRC
+  const activeFeatureData = FEATURES[activeFeature]
+  const ActiveFeatureIcon = activeFeatureData.Icon
 
   const planPrice = (m) => `₺${yearly ? Math.round(m * 0.8) : m}`
 
   useEffect(() => {
-    const root = document.documentElement
-    const prev = root.getAttribute("data-theme")
-    root.setAttribute("data-theme", "dark")
-    return () => {
-      if (prev) root.setAttribute("data-theme", prev)
-      else root.removeAttribute("data-theme")
+    let frame = 0
+    const startTime = performance.now()
+    const duration = 2200
+
+    const tick = (now) => {
+      const progress = Math.min((now - startTime) / duration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setHeroTotal(HERO_TOTAL_AMOUNT * eased)
+
+      if (progress < 1) {
+        frame = requestAnimationFrame(tick)
+      }
     }
+
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
   }, [])
 
   useEffect(() => {
@@ -196,7 +462,7 @@ export default function LandingPage({ onLogin, onSignup, onOpenPage }) {
       {/* ── NAV ── */}
       <nav className="public-nav lp2-nav" ref={navRef}>
         <button className="public-brand" onClick={onSignup} type="button" aria-label="BudgetAssist">
-          <img className="public-brand-logo" src={BRAND_LOGO_SRC} alt="BudgetAssist" />
+          <img className="public-brand-logo" src={brandLogoSrc} alt="BudgetAssist" />
         </button>
         <div className="public-nav-links" aria-label="Navigasyon">
           <a href="#features">Özellikler</a>
@@ -260,6 +526,37 @@ export default function LandingPage({ onLogin, onSignup, onOpenPage }) {
 
             {/* Dashboard mockup */}
             <div className="lp2-hero-visual lp-enter" style={{ animationDelay: "200ms" }}>
+              <div className="lp2-hero-3d-stage" aria-hidden="true">
+                <div className="lp2-coin-stack-3d">
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <b style={{ fontFamily: FONT_MONO }}>₺</b>
+                </div>
+                <div className="lp2-terminal-3d">
+                  <span className="lp2-terminal-screen">
+                    <b style={{ fontFamily: FONT_MONO }}>₺18.5K</b>
+                    <i />
+                  </span>
+                  <span className="lp2-terminal-chip" />
+                  <span className="lp2-terminal-keypad">
+                    <i /><i /><i /><i /><i /><i />
+                  </span>
+                </div>
+                <div className="lp2-card-stack-3d">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <div className="lp2-data-ribbon-3d">
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </div>
               <div className="lp2-dash glass-card">
                 {/* Chrome bar */}
                 <div className="lp2-dash-chrome">
@@ -271,7 +568,13 @@ export default function LandingPage({ onLogin, onSignup, onOpenPage }) {
                 <div className="lp2-dash-topbar">
                   <div>
                     <small>Toplam Varlık</small>
-                    <strong style={{ fontFamily: FONT_MONO }}>₺284.750,00</strong>
+                    <strong
+                      className="lp2-dash-total"
+                      style={{ fontFamily: FONT_MONO }}
+                      aria-label="Toplam varlık 284.750 Türk lirası"
+                    >
+                      {formatHeroTotal(heroTotal)}
+                    </strong>
                   </div>
                   <div className="lp2-dash-delta">
                     <span>↑</span>
@@ -284,7 +587,7 @@ export default function LandingPage({ onLogin, onSignup, onOpenPage }) {
                   {[28, 36, 44, 38, 54, 62, 58, 70, 80, 74, 88, 96].map((h, i) => (
                     <i key={i} style={{ height: `${h}%`, animationDelay: `${600 + i * 60}ms` }} />
                   ))}
-                  <svg viewBox="0 0 540 100" preserveAspectRatio="none" aria-hidden="true">
+                  <svg viewBox="0 0 12 100" preserveAspectRatio="none" aria-hidden="true">
                     <defs>
                       <linearGradient id="lp2ChartGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#4edea3" stopOpacity="0.28" />
@@ -293,11 +596,11 @@ export default function LandingPage({ onLogin, onSignup, onOpenPage }) {
                     </defs>
                     <path
                       className="lp2-chart-area"
-                      d="M20,72 C36,68 50,62 65,59 C80,55 94,70 109,68 C124,60 138,52 153,46 C168,41 182,55 197,52 C212,44 226,38 241,32 C256,27 270,35 285,30 C300,24 314,18 329,14 C344,10 358,16 373,12 C388,8 402,4 417,2 C432,0 456,4 475,6 C494,8 514,10 540,8 L540,100 L20,100 Z"
+                      d={HERO_CHART_AREA}
                     />
                     <path
                       className="lp2-chart-line"
-                      d="M20,72 C36,68 50,62 65,59 C80,55 94,70 109,68 C124,60 138,52 153,46 C168,41 182,55 197,52 C212,44 226,38 241,32 C256,27 270,35 285,30 C300,24 314,18 329,14 C344,10 358,16 373,12 C388,8 402,4 417,2 C432,0 456,4 475,6 C494,8 514,10 540,8"
+                      d={HERO_CHART_TREND}
                     />
                   </svg>
                 </div>
@@ -394,6 +697,29 @@ export default function LandingPage({ onLogin, onSignup, onOpenPage }) {
           </div>
         </div>
 
+        {/* ══ HOW IT WORKS ══════════════════════════════════════════════════ */}
+        <section className="lp2-how lp-reveal">
+          <div className="lp2-section-head">
+            <span className="lp2-label">Nasıl Çalışır?</span>
+            <h2>Finansal kontrolü<br /><em>3 adımda kurun</em></h2>
+            <p>Dağınık işlem, hedef ve ödeme bilgilerini karar alabileceğiniz sade bir akışa çevirin.</p>
+          </div>
+
+          <div className="lp2-how-grid">
+            {HOW_IT_WORKS.map(({ Icon, step, title, desc, stat }) => (
+              <article className="glass-card lp2-how-card" key={title}>
+                <span className="lp2-how-step" style={{ fontFamily: FONT_MONO }}>{step}</span>
+                <div className="lp2-how-icon">
+                  <Icon />
+                </div>
+                <h3>{title}</h3>
+                <p>{desc}</p>
+                <strong style={{ fontFamily: FONT_MONO }}>{stat}</strong>
+              </article>
+            ))}
+          </div>
+        </section>
+
         {/* ══ FEATURES ══════════════════════════════════════════════════════ */}
         <section className="lp2-features" id="features">
           <div className="lp2-section-head lp-reveal">
@@ -413,7 +739,7 @@ export default function LandingPage({ onLogin, onSignup, onOpenPage }) {
                   onClick={() => setActiveFeature(i)}
                 >
                   <span className="lp2-feat-icon" style={{ color: f.color, background: `${f.color}18` }}>
-                    {f.icon}
+                    <f.Icon />
                   </span>
                   <div>
                     <div className="lp2-feat-title">
@@ -430,17 +756,17 @@ export default function LandingPage({ onLogin, onSignup, onOpenPage }) {
             {/* Right: feature detail */}
             <div className="lp2-feat-detail glass-card">
               <div className="lp2-feat-detail-icon" style={{
-                color: FEATURES[activeFeature].color,
-                background: `${FEATURES[activeFeature].color}18`,
+                color: activeFeatureData.color,
+                background: `${activeFeatureData.color}18`,
               }}>
-                {FEATURES[activeFeature].icon}
+                <ActiveFeatureIcon />
               </div>
               <div className="lp2-feat-detail-tag">
-                {FEATURES[activeFeature].new && <span className="lp2-new-badge">Yeni</span>}
-                <span>{FEATURES[activeFeature].tag}</span>
+                {activeFeatureData.new && <span className="lp2-new-badge">Yeni</span>}
+                <span>{activeFeatureData.tag}</span>
               </div>
-              <h3>{FEATURES[activeFeature].title}</h3>
-              <p>{FEATURES[activeFeature].desc}</p>
+              <h3>{activeFeatureData.title}</h3>
+              <p>{activeFeatureData.desc}</p>
 
               {/* Visual preview per feature */}
               <div className="lp2-feat-preview">
@@ -473,10 +799,20 @@ export default function LandingPage({ onLogin, onSignup, onOpenPage }) {
                 )}
                 {activeFeature === 2 && (
                   <div className="lp2-preview-chart">
-                    {[["Oca", 82], ["Şub", 65], ["Mar", 91], ["Nis", 74], ["May", 88], ["Haz", 96]].map(([m, h]) => (
-                      <div key={m} className="lp2-prev-bar-wrap">
-                        <div className="lp2-prev-bar" style={{ height: `${h}%` }} />
-                        <span>{m}</span>
+                    {[
+                      ["Oca", 82, "₺18K"],
+                      ["Şub", 65, "₺14K"],
+                      ["Mar", 91, "₺22K"],
+                      ["Nis", 74, "₺17K"],
+                      ["May", 88, "₺21K"],
+                      ["Haz", 96, "₺24K"],
+                    ].map(([m, h, value]) => (
+                      <div key={m} className="lp2-prev-bar-wrap" style={{ "--bar-height": `${h}%` }}>
+                        <span className="lp2-prev-bar-value" style={{ fontFamily: FONT_MONO }}>{value}</span>
+                        <div className="lp2-prev-bar-rail">
+                          <div className="lp2-prev-bar" />
+                        </div>
+                        <span className="lp2-prev-month">{m}</span>
                       </div>
                     ))}
                   </div>
@@ -602,11 +938,34 @@ export default function LandingPage({ onLogin, onSignup, onOpenPage }) {
                 type="button"
                 onClick={onSignup}
                 className="lp2-feat-cta"
-                style={{ color: FEATURES[activeFeature].color, borderColor: `${FEATURES[activeFeature].color}40` }}
+                style={{ color: activeFeatureData.color, borderColor: `${activeFeatureData.color}40` }}
               >
-                {FEATURES[activeFeature].title} özelliğini keşfet →
+                {activeFeatureData.title} özelliğini keşfet →
               </button>
             </div>
+          </div>
+        </section>
+
+        {/* ══ SECURITY STRIP ════════════════════════════════════════════════ */}
+        <section className="lp2-security-strip lp-reveal">
+          <div className="lp2-security-copy">
+            <span className="lp2-label">Güvenlik</span>
+            <h2>Finans verileriniz için sakin ve güvenli bir alan.</h2>
+            <p>BudgetAssist, kişisel finans verilerinizi anlaşılır kontroller ve güvenli hesap deneyimiyle yönetmeniz için tasarlandı.</p>
+            <button type="button" onClick={() => onOpenPage("security")}>
+              Güvenlik detaylarını incele →
+            </button>
+          </div>
+          <div className="lp2-security-grid">
+            {SECURITY_POINTS.map(({ Icon, title, desc }) => (
+              <div className="lp2-security-point" key={title}>
+                <span><Icon /></span>
+                <div>
+                  <strong>{title}</strong>
+                  <p>{desc}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -626,20 +985,22 @@ export default function LandingPage({ onLogin, onSignup, onOpenPage }) {
             <span className="lp2-label">Kullanıcı Yorumları</span>
             <h2>47.000+ kişi zaten kullanıyor</h2>
           </div>
-          <div className="lp2-testi-grid">
-            {TESTIMONIALS.map((t) => (
-              <article className="glass-card lp2-testi-card" key={t.name}>
-                <div className="lp2-testi-stars">★★★★★</div>
-                <p>"{t.text}"</p>
-                <div className="lp2-testi-author">
-                  <span className="lp2-testi-avatar">{t.avatar}</span>
-                  <div>
-                    <strong>{t.name}</strong>
-                    <small>{t.role}</small>
+          <div className="lp2-testi-marquee" aria-label="Kullanıcı yorumları">
+            <div className="lp2-testi-track">
+              {[...TESTIMONIALS, ...TESTIMONIALS].map((t, i) => (
+                <article className="glass-card lp2-testi-card" key={`${t.name}-${i}`} aria-hidden={i >= TESTIMONIALS.length}>
+                  <div className="lp2-testi-stars">★★★★★</div>
+                  <p>"{t.text}"</p>
+                  <div className="lp2-testi-author">
+                    <span className="lp2-testi-avatar">{t.avatar}</span>
+                    <div>
+                      <strong>{t.name}</strong>
+                      <small>{t.role}</small>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -695,6 +1056,22 @@ export default function LandingPage({ onLogin, onSignup, onOpenPage }) {
           </div>
         </section>
 
+        {/* ══ FAQ ═══════════════════════════════════════════════════════════ */}
+        <section className="lp2-faq lp-reveal">
+          <div className="lp2-section-head" style={{ marginBottom: "2rem" }}>
+            <span className="lp2-label">Sık Sorulanlar</span>
+            <h2>Başlamadan önce<br /><em>aklınızdaki sorular</em></h2>
+          </div>
+          <div className="lp2-faq-grid">
+            {FAQS.map(({ q, a }) => (
+              <article className="glass-card lp2-faq-item" key={q}>
+                <h3>{q}</h3>
+                <p>{a}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
         {/* ══ FINAL CTA ═════════════════════════════════════════════════════ */}
         <section className="lp2-cta lp-reveal">
           <div className="lp2-cta-grid" aria-hidden="true" />
@@ -723,7 +1100,7 @@ export default function LandingPage({ onLogin, onSignup, onOpenPage }) {
       {/* ══ FOOTER ════════════════════════════════════════════════════════ */}
       <footer className="public-footer lp2-footer">
         <div className="lp2-footer-brand">
-          <img className="public-brand-logo" src={BRAND_LOGO_SRC} alt="BudgetAssist" />
+          <img className="public-brand-logo" src={brandLogoSrc} alt="BudgetAssist" />
           <div>
             <small>© 2026 BudgetAssist. Tüm hakları saklıdır.</small>
           </div>

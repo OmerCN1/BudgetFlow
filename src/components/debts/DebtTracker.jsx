@@ -295,8 +295,8 @@ export default function DebtTracker({
                 const isOverdue = debt.dueDate && !debt.isSettled && debt.dueDate < today()
 
                 return (
-                  <Card key={debt.id} style={{ padding: "14px 16px" }}>
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                  <Card key={debt.id} className="debt-card" style={{ padding: "14px 16px" }}>
+                    <div className="debt-card-main" style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                       <div
                         style={{
                           width: 40,
@@ -400,7 +400,7 @@ export default function DebtTracker({
                         )}
                       </div>
 
-                      <div style={{ display: "flex", flexDirection: "column", gap: 5, flexShrink: 0 }}>
+                      <div className="debt-card-actions" style={{ display: "flex", flexDirection: "column", gap: 5, flexShrink: 0 }}>
                         {!debt.isSettled && (
                           <>
                             <button

@@ -168,7 +168,7 @@ export default function Categories({
 
           <div>
             <FieldLabel>İkon</FieldLabel>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 8 }}>
+            <div className="cat-icon-grid" style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 8 }}>
               {CATEGORY_ICONS.map((icon) => (
                 <button
                   key={icon}
@@ -191,6 +191,7 @@ export default function Categories({
           <div>
             <FieldLabel>Tür</FieldLabel>
             <div
+              className="cat-type-grid"
               style={{
                 display: "grid",
                 gridTemplateColumns: "1fr 1fr",

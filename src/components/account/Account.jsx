@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import Card from "../ui/Card"
 import FieldLabel from "../ui/FieldLabel"
@@ -25,7 +25,29 @@ const initialsFor = (name, email) =>
     .join("")
     .toUpperCase()
 
-export default function Account({ user, profile, txs, cats, balance, onProfileUpdate, onOpenPlans }) {
+const PLAN_META = {
+  free: {
+    name: "Ücretsiz",
+    label: "Ücretsiz Üye",
+    product: "BudgetAssist Free",
+    monthly: 0,
+  },
+  standard: {
+    name: "Standart",
+    label: "Standart Üye",
+    product: "BudgetAssist Standard",
+    monthly: 49,
+  },
+  premium: {
+    name: "Premium",
+    label: "Premium Üye",
+    product: "BudgetAssist Private",
+    monthly: 149,
+  },
+}
+
+export default function Account({ user, profile, txs, cats, balance, subscription, onProfileUpdate, onAvatarUpload, onGetAvatarUrl, onOpenPlans }) {
+  const avatarInputRef = useRef(null)
   const fallbackName = user?.email?.split("@")[0] || "BudgetAssist"
   const [displayName, setDisplayName] = useState(profile?.display_name || fallbackName)
   const [monthlyIncomeTarget, setMonthlyIncomeTarget] = useState(profile?.monthly_income_target || "")
@@ -37,7 +59,14 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
   const [pushNotif, setPushNotif] = useState(profile?.notification_push !== false)
   const [smsNotif, setSmsNotif] = useState(Boolean(profile?.notification_sms))
   const [phoneNumber, setPhoneNumber] = useState(profile?.phone_number || "")
+  const [avatarUrl, setAvatarUrl] = useState("")
+  const [avatarSaving, setAvatarSaving] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [securityLoading, setSecurityLoading] = useState(false)
+  const [sessionInfo, setSessionInfo] = useState(null)
+  const [mfaFactors, setMfaFactors] = useState([])
+  const [mfaEnroll, setMfaEnroll] = useState(null)
+  const [mfaCode, setMfaCode] = useState("")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [sendingNotif, setSendingNotif] = useState(false)
@@ -57,6 +86,26 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
     setPhoneNumber(profile?.phone_number || "")
   }, [fallbackName, profile])
 
+  useEffect(() => {
+    let cancelled = false
+    if (!profile?.avatar_url || !onGetAvatarUrl) {
+      setAvatarUrl("")
+      return () => { cancelled = true }
+    }
+    onGetAvatarUrl(profile.avatar_url)
+      .then((url) => {
+        if (!cancelled) setAvatarUrl(url || "")
+      })
+      .catch(() => {
+        if (!cancelled) setAvatarUrl("")
+      })
+    return () => { cancelled = true }
+  }, [profile?.avatar_url, onGetAvatarUrl])
+
+  useEffect(() => {
+    loadSecurityState()
+  }, [user?.id])
+
   const income = useMemo(() => txs.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0), [txs])
   const expense = useMemo(() => txs.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0), [txs])
   const expenseRatio = income > 0 ? Math.min((expense / income) * 100, 100) : 0
@@ -64,6 +113,15 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
   const customerNo = `BA-${String(user?.id || "000000").replace(/\D/g, "").slice(0, 6).padEnd(6, "0")}`
   const accountAge = profile?.created_at ? compactDateTime(profile.created_at) : "Yeni hesap"
   const initials = initialsFor(displayName, user?.email)
+  const activePlan = PLAN_META[subscription?.planId || "free"] || PLAN_META.free
+  const billingInterval = subscription?.billingInterval || "monthly"
+  const planPrice = billingInterval === "yearly"
+    ? Math.round(activePlan.monthly * 0.8)
+    : activePlan.monthly
+  const nextPayment = activePlan.monthly > 0 && subscription?.currentPeriodEnd
+    ? compactDateTime(subscription.currentPeriodEnd)
+    : "Ödeme yok"
+  const planStatus = statusLabel(subscription?.status || "active")
 
   const saveProfile = async () => {
     setSaving(true)
@@ -88,6 +146,133 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
       setError(err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const loadSecurityState = async () => {
+    if (!user?.id) return
+    setSecurityLoading(true)
+    try {
+      const [{ data: sessionData }, factorsResult] = await Promise.all([
+        supabase.auth.getSession(),
+        supabase.auth.mfa?.listFactors ? supabase.auth.mfa.listFactors() : Promise.resolve({ data: { all: [] } }),
+      ])
+      const factors = factorsResult?.data?.all || factorsResult?.data?.totp || []
+      setSessionInfo(sessionData?.session || null)
+      setMfaFactors(factors)
+      const hasVerifiedTotp = factors.some((factor) => factor.factor_type === "totp" && factor.status === "verified")
+      setTwoFactor(hasVerifiedTotp)
+    } catch {
+      setSessionInfo(null)
+      setMfaFactors([])
+    } finally {
+      setSecurityLoading(false)
+    }
+  }
+
+  const startMfaEnroll = async () => {
+    setSecurityLoading(true)
+    setError("")
+    setMessage("")
+    try {
+      if (!supabase.auth.mfa?.enroll) throw new Error("Supabase MFA istemcisi bu ortamda kullanılamıyor.")
+      const factorsResult = await supabase.auth.mfa.listFactors()
+      const factors = factorsResult?.data?.all || factorsResult?.data?.totp || []
+      const verifiedTotp = factors.find((factor) => factor.factor_type === "totp" && factor.status === "verified")
+      if (verifiedTotp) {
+        setTwoFactor(true)
+        setMessage("İki faktörlü kimlik doğrulama zaten etkin.")
+        return
+      }
+
+      const staleBudgetAssistFactors = factors.filter((factor) =>
+        factor.factor_type === "totp" &&
+        factor.status !== "verified" &&
+        String(factor.friendly_name || "").startsWith("BudgetAssist Authenticator")
+      )
+      for (const factor of staleBudgetAssistFactors) {
+        await supabase.auth.mfa.unenroll({ factorId: factor.id })
+      }
+
+      const { data, error: enrollError } = await supabase.auth.mfa.enroll({
+        factorType: "totp",
+        friendlyName: `BudgetAssist Authenticator ${new Date().toISOString().slice(0, 19)}`,
+      })
+      if (enrollError) throw enrollError
+      setMfaEnroll(data)
+      setMessage("QR kodu authenticator uygulamanıza okutun ve 6 haneli kodu girin.")
+    } catch (err) {
+      setError(err.message || "2FA başlatılamadı.")
+    } finally {
+      setSecurityLoading(false)
+    }
+  }
+
+  const verifyMfaEnroll = async () => {
+    if (!mfaEnroll?.id || !mfaCode.trim()) return
+    setSecurityLoading(true)
+    setError("")
+    setMessage("")
+    try {
+      const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: mfaEnroll.id })
+      if (challengeError) throw challengeError
+      const { error: verifyError } = await supabase.auth.mfa.verify({
+        factorId: mfaEnroll.id,
+        challengeId: challenge.id,
+        code: mfaCode.trim(),
+      })
+      if (verifyError) throw verifyError
+      await onProfileUpdate?.({ two_factor_enabled: true })
+      setMfaEnroll(null)
+      setMfaCode("")
+      setTwoFactor(true)
+      setMessage("İki faktörlü kimlik doğrulama etkinleştirildi.")
+      await loadSecurityState()
+    } catch (err) {
+      setError(err.message || "2FA kodu doğrulanamadı.")
+    } finally {
+      setSecurityLoading(false)
+    }
+  }
+
+  const disableMfa = async () => {
+    const verified = mfaFactors.filter((factor) => factor.factor_type === "totp" && factor.status === "verified")
+    if (verified.length === 0) return
+    setSecurityLoading(true)
+    setError("")
+    setMessage("")
+    try {
+      for (const factor of verified) {
+        const { error: unenrollError } = await supabase.auth.mfa.unenroll({ factorId: factor.id })
+        if (unenrollError) throw unenrollError
+      }
+      await onProfileUpdate?.({ two_factor_enabled: false })
+      setTwoFactor(false)
+      setMessage("İki faktörlü kimlik doğrulama kapatıldı.")
+      await loadSecurityState()
+    } catch (err) {
+      setError(err.message || "2FA kapatılamadı.")
+    } finally {
+      setSecurityLoading(false)
+    }
+  }
+
+  const uploadAvatar = async (file) => {
+    if (!file || !onAvatarUpload) return
+    setAvatarSaving(true)
+    setError("")
+    setMessage("")
+    const previewUrl = URL.createObjectURL(file)
+    setAvatarUrl(previewUrl)
+    try {
+      await onAvatarUpload(file)
+      setMessage("Profil görseli güncellendi.")
+    } catch (err) {
+      setError(err.message || "Profil görseli güncellenemedi.")
+      setAvatarUrl("")
+    } finally {
+      URL.revokeObjectURL(previewUrl)
+      setAvatarSaving(false)
     }
   }
 
@@ -146,19 +331,34 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
       <section className="account-hero">
         <div className="account-identity">
           <div className="account-avatar account-avatar-glow">
-            <span>{initials}</span>
+            {avatarUrl ? <img src={avatarUrl} alt="" /> : <span>{initials}</span>}
             <b>✓</b>
           </div>
           <div>
             <div className="account-title-row">
               <h1>{displayName || "Hesabım"}</h1>
-              <span>Premium Üye</span>
+              <span>{activePlan.label}</span>
             </div>
             <p>{user?.email}</p>
             <small>Müşteri No: #{customerNo}</small>
           </div>
         </div>
         <div className="account-hero-actions">
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            onChange={async (event) => {
+              const file = event.target.files?.[0]
+              if (!file) return
+              await uploadAvatar(file)
+              event.target.value = ""
+            }}
+            style={{ display: "none" }}
+          />
+          <button onClick={() => avatarInputRef.current?.click()} disabled={avatarSaving} style={btnGhost}>
+            {avatarSaving ? "Yükleniyor" : "Avatar Güncelle"}
+          </button>
           <button onClick={exportCsv} style={btnGhost}>Verileri Dışa Aktar</button>
           <button onClick={saveProfile} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.7 : 1 }}>
             {saving ? "Kaydediliyor" : "Düzenle"}
@@ -216,16 +416,65 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
                   <span>▥</span>
                   <div>
                     <strong>İki Faktörlü Kimlik Doğrulama</strong>
-                    <small>{twoFactor ? "Ek güvenlik açık" : "Ek güvenlik kapalı"}</small>
+                    <small>{twoFactor ? "Supabase MFA etkin" : "Authenticator uygulamasıyla etkinleştirilebilir"}</small>
                   </div>
                 </div>
-                <Switch checked={twoFactor} onChange={setTwoFactor} />
+                <button
+                  type="button"
+                  onClick={twoFactor ? disableMfa : startMfaEnroll}
+                  disabled={securityLoading}
+                  style={{ ...btnGhost, padding: "8px 12px", fontSize: 12 }}
+                >
+                  {securityLoading ? "Kontrol" : twoFactor ? "Kapat" : "Etkinleştir"}
+                </button>
               </div>
+              {mfaEnroll && (
+                <div className="account-action-row" style={{ alignItems: "flex-start" }}>
+                  <div className="account-action-copy" style={{ alignItems: "flex-start" }}>
+                    <span>2F</span>
+                    <div>
+                      <strong>Authenticator Kurulumu</strong>
+                      <small>QR kodu okutun, sonra 6 haneli kodu girin.</small>
+                      {mfaEnroll.totp?.qr_code && <QrCodeBox value={mfaEnroll.totp.qr_code} />}
+                      {mfaEnroll.totp?.uri && (
+                        <details style={{ marginTop: 10 }}>
+                          <summary style={{ color: S.muted, cursor: "pointer", fontSize: 12 }}>Manuel kurulum anahtarı</summary>
+                          <small
+                            style={{
+                              display: "block",
+                              marginTop: 8,
+                              maxWidth: 360,
+                              color: S.sub,
+                              fontFamily: FONT_MONO,
+                              fontSize: 10,
+                              lineHeight: 1.5,
+                              wordBreak: "break-all",
+                            }}
+                          >
+                            {mfaEnroll.totp.uri}
+                          </small>
+                        </details>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gap: 8, minWidth: 150 }}>
+                    <input
+                      value={mfaCode}
+                      onChange={(event) => setMfaCode(event.target.value)}
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="123456"
+                      style={inputStyle}
+                    />
+                    <button type="button" onClick={verifyMfaEnroll} style={btnPrimary}>Doğrula</button>
+                  </div>
+                </div>
+              )}
             </div>
             <FieldLabel>Son Giriş Hareketleri</FieldLabel>
             <div className="account-login-list">
-              <LoginRow device="macOS Sonoma • Chrome" meta="Bugün • İstanbul, TR" />
-              <LoginRow device="Mobil tarayıcı • BudgetAssist" meta="Dün • İstanbul, TR" />
+              <LoginRow device={sessionDeviceLabel(sessionInfo)} meta={sessionMetaLabel(sessionInfo, user)} />
+              <LoginRow device="Kimlik Sağlayıcı" meta={identityProviderLabel(user)} />
             </div>
           </Card>
 
@@ -257,15 +506,21 @@ export default function Account({ user, profile, txs, cats, balance, onProfileUp
             <SectionTitle icon="▰" title="Abonelik" />
             <div className="account-plan-card">
               <small>Aktif Plan</small>
-              <strong>Premium</strong>
-              <span>BudgetAssist Private</span>
+              <strong>{activePlan.name}</strong>
+              <span>{activePlan.product}</span>
             </div>
             <div className="account-meta-list">
-              <MetaRow label="Bir sonraki ödeme" value="12 Haziran 2026" />
-              <MetaRow label="Tutar" value="₺149,90 / ay" highlight />
+              <MetaRow label="Durum" value={planStatus} highlight={subscription?.status === "active"} />
+              <MetaRow label="Dönem" value={billingInterval === "yearly" ? "Yıllık" : "Aylık"} />
+              <MetaRow label="Bir sonraki ödeme" value={nextPayment} />
+              <MetaRow
+                label="Tutar"
+                value={activePlan.monthly > 0 ? `₺${planPrice} / ay` : "₺0 / ay"}
+                highlight={activePlan.monthly > 0}
+              />
               <MetaRow label="Kullanım oranı" value={`%${Math.round(expenseRatio)}`} />
             </div>
-            <button onClick={onOpenPlans} style={{ ...btnGhost, width: "100%", marginTop: 14 }}>Yönet ve Yükselt</button>
+            <button onClick={onOpenPlans} style={{ ...btnGhost, width: "100%", marginTop: 14 }}>Planı Yönet</button>
           </Card>
 
           <Card>
@@ -428,6 +683,58 @@ function LoginRow({ device, meta }) {
   )
 }
 
+function QrCodeBox({ value }) {
+  const isImageSource = /^data:image\//.test(value) || /^https?:\/\//.test(value)
+  return (
+    <div
+      style={{
+        width: 180,
+        height: 180,
+        marginTop: 12,
+        background: "#fff",
+        borderRadius: 10,
+        padding: 10,
+        display: "grid",
+        placeItems: "center",
+        overflow: "hidden",
+        boxSizing: "border-box",
+      }}
+    >
+      {isImageSource ? (
+        <img
+          src={value}
+          alt="Authenticator QR kodu"
+          style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+        />
+      ) : (
+        <div
+          aria-label="Authenticator QR kodu"
+          style={{ width: "100%", height: "100%", display: "grid", placeItems: "center" }}
+          dangerouslySetInnerHTML={{ __html: value }}
+        />
+      )}
+    </div>
+  )
+}
+
+function sessionDeviceLabel(session) {
+  if (!session) return "Aktif oturum bulunamadı"
+  return "Mevcut tarayıcı oturumu"
+}
+
+function sessionMetaLabel(session, user) {
+  if (!session) return "Supabase session bilgisi alınamadı"
+  const lastSignIn = user?.last_sign_in_at ? compactDateTime(user.last_sign_in_at) : "Bilinmiyor"
+  const expiresAt = session.expires_at ? compactDateTime(session.expires_at * 1000) : "Bilinmiyor"
+  return `Son giriş: ${lastSignIn} · Bitiş: ${expiresAt}`
+}
+
+function identityProviderLabel(user) {
+  const identities = user?.identities || []
+  if (identities.length === 0) return user?.app_metadata?.provider || "email"
+  return identities.map((identity) => identity.provider).filter(Boolean).join(", ")
+}
+
 function MetaRow({ label, value, highlight }) {
   return (
     <div className="account-meta-row">
@@ -435,6 +742,13 @@ function MetaRow({ label, value, highlight }) {
       <strong style={{ color: highlight ? S.green : S.text }}>{value}</strong>
     </div>
   )
+}
+
+function statusLabel(status) {
+  if (status === "trialing") return "Deneme"
+  if (status === "past_due") return "Ödeme bekliyor"
+  if (status === "canceled") return "İptal"
+  return "Aktif"
 }
 
 function ToggleRow({ title, text, checked, onChange }) {

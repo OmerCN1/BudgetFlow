@@ -26,15 +26,19 @@ import {
   saveRecurringRule,
   saveTransaction,
   saveTransactions,
+  saveUserSubscription,
+  saveAvatarFile,
   sendCoachMessage,
   settleDebt,
   updateProfile,
   updateTransactions,
-  loadCreditCards,
+  getAvatarUrl,
+  loadCreditCardData,
   saveCreditCard,
   deleteCreditCard,
+  saveCreditCardPayment,
 } from "./services/budgetService"
-import { loadAssets, saveAsset, deleteAsset } from "./services/assetService"
+import { loadAssetPortfolio, saveAsset, deleteAsset, saveAssetTransaction, recordAssetSnapshots } from "./services/assetService"
 import { loadStoredNotifications, markStoredNotificationRead } from "./services/notificationService"
 import { PALETTE, FONT_BODY, S, btnPrimary } from "./constants/theme"
 import { today, sum } from "./utils/helpers"
@@ -79,10 +83,15 @@ export default function App() {
   const [aiMessages, setAiMessages] = useState([])
   const [currentAiConversationId, setCurrentAiConversationId] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [subscription, setSubscription] = useState(null)
   const [debts, setDebts] = useState([])
   const [debtPayments, setDebtPayments] = useState([])
   const [assets, setAssets] = useState([])
+  const [assetTransactions, setAssetTransactions] = useState([])
+  const [assetSnapshots, setAssetSnapshots] = useState([])
   const [creditCards, setCreditCards] = useState([])
+  const [creditCardStatements, setCreditCardStatements] = useState([])
+  const [creditCardPayments, setCreditCardPayments] = useState([])
   const [storedNotifications, setStoredNotifications] = useState([])
   const [view, setView] = useState("dashboard")
   const [dataLoading, setDataLoading] = useState(false)
@@ -109,6 +118,7 @@ export default function App() {
     originalCurrency: "TRY",
     originalAmount: null,
     location: "",
+    creditCardId: "",
   })
 
   const [showCatModal, setShowCatModal] = useState(false)
@@ -151,13 +161,14 @@ export default function App() {
     const refreshPromise = Promise.all([
       loadBudgetData(user),
       loadDebts(user.id).catch(() => ({ debts: [], debtPayments: [] })),
-      loadAssets(user.id).catch(() => []),
-      loadCreditCards(user.id).catch(() => []),
+      loadAssetPortfolio(user.id).catch(() => ({ assets: [], transactions: [], snapshots: [] })),
+      loadCreditCardData(user.id).catch(() => ({ creditCards: [], statements: [], payments: [] })),
       loadStoredNotifications(user.id).catch(() => []),
     ])
-      .then(([data, debtData, assetRows, creditCardRows, notificationRows]) => {
+      .then(([data, debtData, assetData, creditCardData, notificationRows]) => {
         if (refreshSeqRef.current !== requestSeq) return
         setProfile(data.profile)
+        setSubscription(data.subscription || null)
         setCats(data.cats)
         setTxs(data.txs)
         setGoals(data.goals)
@@ -167,8 +178,12 @@ export default function App() {
         setAiInsights(data.aiInsights)
         setDebts(debtData.debts)
         setDebtPayments(debtData.debtPayments)
-        setAssets(assetRows)
-        setCreditCards(creditCardRows)
+        setAssets(assetData.assets || [])
+        setAssetTransactions(assetData.transactions || [])
+        setAssetSnapshots(assetData.snapshots || [])
+        setCreditCards(creditCardData.creditCards || [])
+        setCreditCardStatements(creditCardData.statements || [])
+        setCreditCardPayments(creditCardData.payments || [])
         setStoredNotifications(notificationRows)
         setHasLoadedData(true)
       })
@@ -205,10 +220,15 @@ export default function App() {
       setAiMessages([])
       setCurrentAiConversationId(null)
       setProfile(null)
+      setSubscription(null)
       setDebts([])
       setDebtPayments([])
       setAssets([])
+      setAssetTransactions([])
+      setAssetSnapshots([])
       setCreditCards([])
+      setCreditCardStatements([])
+      setCreditCardPayments([])
       setStoredNotifications([])
       setHasLoadedData(false)
       setDataLoading(false)
@@ -271,6 +291,7 @@ export default function App() {
       originalCurrency: "TRY",
       originalAmount: null,
       location: "",
+      creditCardId: "",
     })
     setEditTx(null)
     setShowTxModal(true)
@@ -289,6 +310,7 @@ export default function App() {
       originalCurrency: t.originalCurrency || "TRY",
       originalAmount: t.originalAmount != null ? String(t.originalAmount) : null,
       location: t.location || "",
+      creditCardId: t.creditCardId || "",
     })
     setEditTx(t)
     setShowTxModal(true)
@@ -315,6 +337,7 @@ export default function App() {
         ? parseFloat(txForm.originalAmount) || null
         : null,
       location: txForm.location?.trim() || null,
+      creditCardId: txForm.paymentMethod === "Kart" ? txForm.creditCardId || null : null,
     }
 
     setActionLoading(true)
@@ -327,6 +350,9 @@ export default function App() {
         }
       }
       setTxs((prev) => editTx ? prev.map((t) => t.id === editTx.id ? saved : t) : [saved, ...prev])
+      if (saved.creditCardId || editTx?.creditCardId) {
+        await refreshData()
+      }
       setShowTxModal(false)
       showNotice(editTx ? "İşlem güncellendi." : "İşlem eklendi.")
     } catch (err) {
@@ -373,6 +399,7 @@ export default function App() {
         paymentMethod: extracted?.paymentMethod || suggested?.paymentMethod || "Kart",
         tags: [...new Set(tags)].join(", "),
         receiptId: receipt.id,
+        creditCardId: "",
       })
       setEditTx(null)
       setShowTxModal(true)
@@ -403,6 +430,7 @@ export default function App() {
           paymentMethod: suggested?.paymentMethod || "Kart",
           tags: ["fiş", ...(suggested?.tags || [])].join(", "),
           receiptId: receipt.id,
+          creditCardId: "",
         })
         setEditTx(null)
         setShowTxModal(true)
@@ -426,6 +454,7 @@ export default function App() {
       paymentMethod: receipt.paymentMethod || suggested?.paymentMethod || "Kart",
       tags: ["fiş", ...(suggested?.tags || [])].join(", "),
       receiptId: receipt.id,
+      creditCardId: "",
     })
     setEditTx(null)
     setView("transactions")
@@ -465,8 +494,10 @@ export default function App() {
     setActionLoading(true)
     try {
       await deleteTransaction(user.id, id)
+      const deleted = txs.find((tx) => tx.id === id)
       setTxs((prev) => prev.filter((t) => t.id !== id))
       setReceipts((prev) => prev.map((receipt) => receipt.transactionId === id ? { ...receipt, transactionId: "" } : receipt))
+      if (deleted?.creditCardId) await refreshData()
       showNotice("İşlem silindi.")
     } catch (err) {
       showError(err.message || "İşlem silinemedi.")
@@ -480,8 +511,10 @@ export default function App() {
     setActionLoading(true)
     try {
       await deleteTransactions(user.id, ids)
+      const deletedHasCard = txs.some((tx) => ids.includes(tx.id) && tx.creditCardId)
       setTxs((prev) => prev.filter((t) => !ids.includes(t.id)))
       setReceipts((prev) => prev.map((receipt) => ids.includes(receipt.transactionId) ? { ...receipt, transactionId: "" } : receipt))
+      if (deletedHasCard) await refreshData()
       showNotice(`${ids.length} işlem silindi.`)
     } catch (err) {
       showError(err.message || "İşlemler silinemedi.")
@@ -563,6 +596,41 @@ export default function App() {
   const handleProfileUpdate = async (values) => {
     const nextProfile = await updateProfile(user.id, values)
     setProfile(nextProfile)
+  }
+
+  const handleAvatarUpload = async (file) => {
+    setActionLoading(true)
+    try {
+      const nextProfile = await saveAvatarFile(user.id, file, profile?.avatar_url || "")
+      setProfile(nextProfile)
+      showNotice("Profil görseli güncellendi.")
+      return nextProfile
+    } catch (err) {
+      showError(err.message || "Profil görseli güncellenemedi.")
+      throw err
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleGetAvatarUrl = useCallback(
+    (avatarPath) => getAvatarUrl(user?.id, avatarPath),
+    [user?.id]
+  )
+
+  const handleSubscriptionUpdate = async (values) => {
+    setActionLoading(true)
+    try {
+      const nextSubscription = await saveUserSubscription(user.id, values)
+      setSubscription(nextSubscription)
+      showNotice("Abonelik planı güncellendi.")
+      return nextSubscription
+    } catch (err) {
+      showError(err.message || "Abonelik güncellenemedi.")
+      throw err
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   const handleSaveGoal = async (goal, editId) => {
@@ -664,6 +732,35 @@ export default function App() {
     }
   }
 
+  const handleSaveAssetTransaction = async (transaction) => {
+    setActionLoading(true)
+    try {
+      const saved = await saveAssetTransaction(user.id, transaction)
+      setAssetTransactions((prev) => [saved.transaction, ...prev])
+      setAssets((prev) => prev.map((asset) => asset.id === saved.asset.id ? saved.asset : asset))
+      showNotice("Varlık hareketi kaydedildi.")
+    } catch (err) {
+      showError(err.message || "Varlık hareketi kaydedilemedi.")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleRecordAssetSnapshots = async (snapshots) => {
+    if (!snapshots?.length) return
+    try {
+      const saved = await recordAssetSnapshots(user.id, snapshots)
+      if (saved.length === 0) return
+      setAssetSnapshots((prev) => {
+        const map = new Map(prev.map((item) => [`${item.assetId}:${item.snapshotDate}`, item]))
+        saved.forEach((item) => map.set(`${item.assetId}:${item.snapshotDate}`, item))
+        return [...map.values()].sort((a, b) => a.snapshotDate.localeCompare(b.snapshotDate))
+      })
+    } catch {
+      // Snapshot persistence is a background enhancement; the portfolio UI can still work without it.
+    }
+  }
+
   const handleSaveCreditCard = async (card, editId) => {
     setActionLoading(true)
     try {
@@ -689,6 +786,20 @@ export default function App() {
       showNotice("Kart silindi.")
     } catch (err) {
       showError(err.message || "Kart silinemedi.")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleSaveCreditCardPayment = async (payment) => {
+    setActionLoading(true)
+    try {
+      const saved = await saveCreditCardPayment(user.id, payment)
+      setCreditCardPayments((prev) => [saved, ...prev])
+      await refreshData()
+      showNotice("Kart ödemesi kaydedildi.")
+    } catch (err) {
+      showError(err.message || "Kart ödemesi kaydedilemedi.")
     } finally {
       setActionLoading(false)
     }
@@ -929,6 +1040,7 @@ export default function App() {
             initialMode={authMode}
             onBackLanding={() => setPublicView("landing")}
             onOpenPage={openPublicPage}
+            theme={theme}
           />
         </Suspense>
       )
@@ -943,6 +1055,7 @@ export default function App() {
             onLogin={() => openAuth("login")}
             onSignup={() => openAuth("signup")}
             onOpenPage={openPublicPage}
+            theme={theme}
           />
         </Suspense>
       )
@@ -954,6 +1067,7 @@ export default function App() {
           onLogin={() => openAuth("login")}
           onSignup={() => openAuth("signup")}
           onOpenPage={openPublicPage}
+          theme={theme}
         />
       </Suspense>
     )
@@ -981,6 +1095,8 @@ export default function App() {
         notificationCount={notificationCount}
         onAddTx={openAddTx}
         user={user}
+        profile={profile}
+        onGetAvatarUrl={handleGetAvatarUrl}
         isAdmin={isAdmin}
         disabled={actionLoading || activeCats.length === 0}
         theme={theme}
@@ -1002,7 +1118,7 @@ export default function App() {
               <ShellMessage compact title="Veriler yükleniyor" text="Hesabınıza ait kayıtlar hazırlanıyor." />
             ) : (
               <>
-              {view === "dashboard" && <Dashboard txs={txs} cats={cats} catById={catById} setView={setView} />}
+              {view === "dashboard" && <Dashboard txs={txs} cats={cats} catById={catById} setView={setView} recurringRules={recurringRules} />}
               {view === "notifications" && (
                 <Notifications
                   txs={txs}
@@ -1014,7 +1130,20 @@ export default function App() {
                   setView={setView}
                 />
               )}
-              {view === "reports" && <Reports txs={txs} cats={cats} />}
+              {view === "reports" && (
+                <Reports
+                  txs={txs}
+                  cats={cats}
+                  assets={assets}
+                  assetSnapshots={assetSnapshots}
+                  creditCards={creditCards}
+                  creditCardPayments={creditCardPayments}
+                  recurringRules={recurringRules}
+                  debts={debts}
+                  debtPayments={debtPayments}
+                  subscription={subscription}
+                />
+              )}
               {view === "receipts" && (
                 <Receipts
                   receipts={receipts}
@@ -1028,7 +1157,8 @@ export default function App() {
               )}
               {view === "plans" && (
                 <SubscriptionPlans
-                  currentPlan="premium"
+                  subscription={subscription}
+                  onPlanChange={handleSubscriptionUpdate}
                   onBackAccount={() => setView("account")}
                 />
               )}
@@ -1050,6 +1180,7 @@ export default function App() {
                     txs={txs}
                     cats={activeCats}
                     receipts={receipts}
+                    creditCards={creditCards}
                     catById={catById}
                     showModal={showTxModal}
                     editTx={editTx}
@@ -1118,8 +1249,12 @@ export default function App() {
               {view === "assets" && (
                 <Assets
                   assets={assets}
+                  assetTransactions={assetTransactions}
+                  assetSnapshots={assetSnapshots}
                   onSaveAsset={handleSaveAsset}
                   onDeleteAsset={handleDeleteAsset}
+                  onSaveAssetTransaction={handleSaveAssetTransaction}
+                  onRecordSnapshots={handleRecordAssetSnapshots}
                 />
               )}
               {view === "debts" && (
@@ -1135,8 +1270,12 @@ export default function App() {
               {view === "creditcards" && (
                 <CreditCards
                   creditCards={creditCards}
+                  txs={txs}
+                  statements={creditCardStatements}
+                  payments={creditCardPayments}
                   onSave={handleSaveCreditCard}
                   onDelete={handleDeleteCreditCard}
+                  onSavePayment={handleSaveCreditCardPayment}
                   theme={theme}
                 />
               )}
@@ -1148,7 +1287,10 @@ export default function App() {
                   txs={txs}
                   cats={cats}
                   balance={balance}
+                  subscription={subscription}
                   onProfileUpdate={handleProfileUpdate}
+                  onAvatarUpload={handleAvatarUpload}
+                  onGetAvatarUrl={handleGetAvatarUrl}
                   onOpenPlans={() => setView("plans")}
                 />
               )}

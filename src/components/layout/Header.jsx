@@ -1,13 +1,14 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { S, btnPrimary } from "../../constants/theme"
 import { TRY } from "../../utils/helpers"
 
-const BRAND_LOGO_SRC = "/assets/ba_full_png_black.svg"
-const BRAND_LOGO_DARK_SRC = "/assets/ba_full_png_black.svg"
+const BRAND_LOGO_LIGHT_SRC = "/assets/ba_logo_black.svg"
+const BRAND_LOGO_DARK_SRC = "/assets/ba_logo_white.svg"
 
-export default function Header({ view, setView, balance, notificationCount = 0, onAddTx, user, isAdmin, disabled, theme, toggleTheme }) {
+export default function Header({ view, setView, balance, notificationCount = 0, onAddTx, user, profile, onGetAvatarUrl, isAdmin, disabled, theme, toggleTheme }) {
   const [mobileOpen, setMobileOpen] = useState(false)
-  const displayName = user?.user_metadata?.display_name || user?.user_metadata?.full_name || "Hesabım"
+  const [avatarUrl, setAvatarUrl] = useState("")
+  const displayName = profile?.display_name || user?.user_metadata?.display_name || user?.user_metadata?.full_name || "Hesabım"
   const initials = displayName
     .split(/[.\s_-]+/)
     .filter(Boolean)
@@ -15,7 +16,23 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
     .map((part) => part[0])
     .join("")
     .toUpperCase()
-  const brandLogoSrc = theme === "dark" ? BRAND_LOGO_DARK_SRC : BRAND_LOGO_SRC
+  const brandLogoSrc = theme === "light" ? BRAND_LOGO_LIGHT_SRC : BRAND_LOGO_DARK_SRC
+
+  useEffect(() => {
+    let cancelled = false
+    if (!profile?.avatar_url || !onGetAvatarUrl) {
+      setAvatarUrl("")
+      return () => { cancelled = true }
+    }
+    onGetAvatarUrl(profile.avatar_url)
+      .then((url) => {
+        if (!cancelled) setAvatarUrl(url || "")
+      })
+      .catch(() => {
+        if (!cancelled) setAvatarUrl("")
+      })
+    return () => { cancelled = true }
+  }, [profile?.avatar_url, onGetAvatarUrl])
 
   const NAV = [
     { id: "dashboard",     label: "Özet",        icon: "dashboard",     group: "Genel" },
@@ -55,9 +72,10 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
       aria-expanded={mobileOpen}
     >
       <img
+        className="sidebar-logo sidebar-logo-mobile"
         src={brandLogoSrc}
         alt="BudgetAssist"
-        style={{ width: 156, maxWidth: "62vw", height: 46, display: "block", objectFit: "cover", objectPosition: "center" }}
+        style={{ width: 156, maxWidth: "62vw", height: 46, display: "block" }}
       />
       <svg aria-hidden="true" viewBox="0 0 24 24">
         <path d="M4 7h16M4 12h16M4 17h16" />
@@ -84,9 +102,10 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
         }}
       >
         <img
+          className="sidebar-logo"
           src={brandLogoSrc}
           alt="BudgetAssist"
-          style={{ width: 176, maxWidth: "calc(100% - 44px)", height: 52, display: "block", objectFit: "cover", objectPosition: "center" }}
+          style={{ width: 176, maxWidth: "calc(100% - 44px)", height: 52, display: "block" }}
         />
         <button
           className="mobile-sidebar-close"
@@ -163,7 +182,9 @@ export default function Header({ view, setView, balance, notificationCount = 0, 
         <div className="sidebar-footer-row">
           {user?.email && (
             <button className="sidebar-profile" onClick={() => navigate("account")} title={user.email} type="button">
-              <span className="sidebar-profile-avatar">{initials || "BA"}</span>
+              <span className="sidebar-profile-avatar">
+                {avatarUrl ? <img src={avatarUrl} alt="" /> : initials || "BA"}
+              </span>
               <span className="sidebar-profile-copy">
                 <span>{displayName}</span>
                 <small>Profil</small>

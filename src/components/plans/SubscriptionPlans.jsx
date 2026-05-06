@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import Card from "../ui/Card"
 import { btnGhost } from "../../constants/theme"
@@ -42,15 +42,42 @@ const COMPARISON = [
   { feature: "Fiş / Fatura Arşivi", free: "10 belge", standard: "250 belge", premium: "Sınırsız" },
 ]
 
-export default function SubscriptionPlans({ currentPlan = "premium", onBackAccount }) {
-  const [billing, setBilling] = useState("yearly")
+export default function SubscriptionPlans({ subscription, onPlanChange, onBackAccount }) {
+  const currentPlan = subscription?.planId || "free"
+  const currentBilling = subscription?.billingInterval || "monthly"
+  const [billing, setBilling] = useState(currentBilling)
   const [selectedPlan, setSelectedPlan] = useState(currentPlan)
+  const [savingPlan, setSavingPlan] = useState("")
+  const [message, setMessage] = useState("")
+  const [error, setError] = useState("")
   const yearly = billing === "yearly"
   const annualSavings = useMemo(() => PLANS.reduce((sum, plan) => sum + plan.monthly * 12 * 0.2, 0), [])
+
+  useEffect(() => {
+    setBilling(currentBilling)
+    setSelectedPlan(currentPlan)
+  }, [currentBilling, currentPlan])
 
   const priceFor = (monthly) => {
     const price = yearly ? Math.round(monthly * 0.8) : monthly
     return `₺${price}`
+  }
+
+  const choosePlan = async (planId) => {
+    setSelectedPlan(planId)
+    if (!onPlanChange) return
+    setSavingPlan(planId)
+    setMessage("")
+    setError("")
+    try {
+      await onPlanChange({ planId, billingInterval: billing, status: "active" })
+      setMessage(`${planName(planId)} planı aboneliğinize işlendi.`)
+    } catch (err) {
+      setError(err.message || "Plan güncellenemedi.")
+      setSelectedPlan(currentPlan)
+    } finally {
+      setSavingPlan("")
+    }
   }
 
   return (
@@ -60,7 +87,7 @@ export default function SubscriptionPlans({ currentPlan = "premium", onBackAccou
         <div>
           <span>BudgetAssist Plans</span>
           <h1>Planınızı Seçin</h1>
-          <p>Size en uygun bütçe yönetimi deneyimini seçin. Sessiz lüksün ve mutlak kontrolün finansal dünyasına adım atın.</p>
+          <p>Aktif aboneliğiniz veritabanında saklanır ve profil ekranındaki plan kartı buna göre güncellenir.</p>
         </div>
         <div className="plans-billing-toggle" role="group" aria-label="Faturalandırma dönemi">
           <button type="button" className={billing === "monthly" ? "is-active" : ""} onClick={() => setBilling("monthly")}>Aylık</button>
@@ -70,9 +97,20 @@ export default function SubscriptionPlans({ currentPlan = "premium", onBackAccou
         </div>
       </section>
 
+      {(message || error) && (
+        <section className="plans-summary-row" style={{ borderColor: error ? "rgba(244,63,94,0.35)" : undefined }}>
+          <div>
+            <strong>{error ? "Plan güncellenemedi" : "Plan güncellendi"}</strong>
+            <span>{error || message}</span>
+          </div>
+          <b>{subscription?.status === "active" ? "Aktif" : subscription?.status || "Aktif"}</b>
+        </section>
+      )}
+
       <section className="plans-grid">
         {PLANS.map((plan) => {
-          const isCurrent = currentPlan === plan.id
+          const isCurrent = currentPlan === plan.id && currentBilling === billing
+          const isSamePlanDifferentBilling = currentPlan === plan.id && currentBilling !== billing
           const isSelected = selectedPlan === plan.id
           return (
             <Card key={plan.id} className={`plan-card is-${plan.tone}${isSelected ? " is-selected" : ""}`}>
@@ -97,10 +135,17 @@ export default function SubscriptionPlans({ currentPlan = "premium", onBackAccou
 
               <button
                 type="button"
-                onClick={() => setSelectedPlan(plan.id)}
+                onClick={() => choosePlan(plan.id)}
+                disabled={savingPlan === plan.id}
                 className={plan.id === "premium" ? "plan-primary-button" : "plan-secondary-button"}
               >
-                {isCurrent ? "Mevcut Plan" : plan.action}
+                {savingPlan === plan.id
+                  ? "Kaydediliyor"
+                  : isCurrent
+                    ? "Mevcut Plan"
+                    : isSamePlanDifferentBilling
+                      ? "Dönemi Güncelle"
+                      : plan.action}
               </button>
             </Card>
           )
@@ -136,6 +181,10 @@ export default function SubscriptionPlans({ currentPlan = "premium", onBackAccou
       </section>
     </div>
   )
+}
+
+function planName(planId) {
+  return PLANS.find((plan) => plan.id === planId)?.name || "Ücretsiz"
 }
 
 function PlanValue({ value, premium = false }) {

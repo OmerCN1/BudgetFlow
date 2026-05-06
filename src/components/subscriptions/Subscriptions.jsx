@@ -110,7 +110,7 @@ export default function Subscriptions({ cats, rules, onSaveRule, onCreateFromRul
                 const daysUntil = rule.nextDate ? Math.ceil((new Date(rule.nextDate) - new Date()) / 86400000) : null
                 const isSoon = daysUntil !== null && daysUntil <= 7
                 return (
-                  <div key={rule.id} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 12, alignItems: "center", border: `1px solid ${S.border}`, borderRadius: 8, padding: 12 }}>
+                  <div key={rule.id} className="sub-rule-row" style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 12, alignItems: "center", border: `1px solid ${S.border}`, borderRadius: 8, padding: 12 }}>
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                         <span style={{ color: S.text, fontWeight: 800 }}>{rule.name}</span>

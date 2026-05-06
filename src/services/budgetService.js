@@ -10,6 +10,10 @@ import {
 } from "../constants/seedData"
 import { supabase } from "../lib/supabase"
 
+const AVATAR_SIGNED_URL_EXPIRES_IN_SECONDS = 60 * 30
+const AVATAR_SIGNED_URL_CACHE_TTL_MS = 25 * 60 * 1000
+const avatarSignedUrlCache = new Map()
+
 const toCategory = (row) => ({
   id: row.id,
   name: row.name,
@@ -34,6 +38,8 @@ const toTransaction = (row) => ({
   originalCurrency: row.original_currency || "TRY",
   originalAmount: row.original_amount != null ? Number(row.original_amount) : null,
   location: row.location || "",
+  creditCardId: row.credit_card_id || "",
+  creditCardStatementId: row.credit_card_statement_id || "",
 })
 
 const fromCategory = (category, userId) => ({
@@ -60,6 +66,8 @@ const fromTransaction = (transaction, userId) => ({
   original_currency: transaction.originalCurrency || "TRY",
   original_amount: transaction.originalAmount ?? null,
   location: transaction.location || null,
+  credit_card_id: transaction.creditCardId || null,
+  credit_card_statement_id: transaction.creditCardStatementId || null,
 })
 
 const fromLegacyTransaction = (transaction, userId) => ({
@@ -144,6 +152,32 @@ const toAiMessage = (row) => ({
   createdAt: row.created_at,
 })
 
+const toSubscription = (row) => ({
+  id: row.id,
+  planId: row.plan_id || "free",
+  status: row.status || "active",
+  billingInterval: row.billing_interval || "monthly",
+  currentPeriodStart: row.current_period_start || "",
+  currentPeriodEnd: row.current_period_end || "",
+  cancelAtPeriodEnd: Boolean(row.cancel_at_period_end),
+  provider: row.provider || "manual",
+  providerSubscriptionId: row.provider_subscription_id || "",
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+})
+
+const defaultSubscription = () => ({
+  id: "",
+  planId: "free",
+  status: "active",
+  billingInterval: "monthly",
+  currentPeriodStart: new Date().toISOString().slice(0, 10),
+  currentPeriodEnd: "",
+  cancelAtPeriodEnd: false,
+  provider: "manual",
+  providerSubscriptionId: "",
+})
+
 const toReceipt = (row) => ({
   id: row.id,
   transactionId: row.transaction_id || "",
@@ -157,8 +191,33 @@ const toReceipt = (row) => ({
   paymentMethod: row.payment_method || "Kart",
   notes: row.notes || "",
   confidence: Number(row.scan_confidence || 0),
+  items: Array.isArray(row.receipt_items) ? row.receipt_items.map(toReceiptItem) : [],
   createdAt: row.created_at,
 })
+
+const toReceiptItem = (row) => ({
+  id: row.id,
+  receiptId: row.receipt_id,
+  name: row.name || "",
+  quantity: Number(row.quantity || 0),
+  unitPrice: Number(row.unit_price || 0),
+  totalPrice: Number(row.total_price || 0),
+  createdAt: row.created_at,
+})
+
+const fromReceiptItem = (item, userId, receiptId) => {
+  const quantity = Number(item.qty ?? item.quantity ?? 1)
+  const unitPrice = Number(item.unitPrice ?? item.unit_price ?? 0)
+  const totalPrice = Number(item.totalPrice ?? item.total_price ?? (quantity * unitPrice))
+  return {
+    user_id: userId,
+    receipt_id: receiptId,
+    name: String(item.name || "").trim(),
+    quantity: Number.isFinite(quantity) && quantity >= 0 ? quantity : 1,
+    unit_price: Number.isFinite(unitPrice) && unitPrice >= 0 ? unitPrice : 0,
+    total_price: Number.isFinite(totalPrice) && totalPrice >= 0 ? totalPrice : 0,
+  }
+}
 
 const isSchemaMissing = (error) => {
   const message = error?.message || ""
@@ -223,7 +282,7 @@ const advanceRecurringDate = (dateString, frequency) => {
 const categoryDedupeKey = (category) =>
   `${String(category.name || "").trim().toLocaleLowerCase("tr-TR")}:${Boolean(category.is_income)}`
 
-const PROFILE_COLS = "id,user_id,display_name,currency,seeded_at,created_at,updated_at,monthly_income_target,locale,timezone,two_factor_enabled,notification_email,notification_push,notification_sms,phone_number,is_banned"
+const PROFILE_COLS = "id,user_id,display_name,currency,seeded_at,created_at,updated_at,monthly_income_target,locale,timezone,two_factor_enabled,notification_email,notification_push,notification_sms,phone_number,avatar_url,is_banned"
 
 async function ensureProfile(user) {
   const { data: profile, error } = await supabase
@@ -248,6 +307,48 @@ async function ensureProfile(user) {
 
   if (insertError) throw insertError
   return data
+}
+
+async function ensureUserSubscription(userId) {
+  const { data: existing, error } = await supabase
+    .from("user_subscriptions")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (error) {
+    if (isSchemaMissing(error)) return defaultSubscription()
+    throw error
+  }
+  if (existing) return toSubscription(existing)
+
+  const now = new Date()
+  const periodEnd = addMonths(now, 1)
+  const { data, error: insertError } = await supabase
+    .from("user_subscriptions")
+    .insert({
+      user_id: userId,
+      plan_id: "free",
+      status: "active",
+      billing_interval: "monthly",
+      current_period_start: now.toISOString().slice(0, 10),
+      current_period_end: periodEnd.toISOString().slice(0, 10),
+      provider: "manual",
+    })
+    .select()
+    .single()
+
+  if (insertError) {
+    if (isSchemaMissing(insertError)) return defaultSubscription()
+    throw insertError
+  }
+  return toSubscription(data)
+}
+
+function addMonths(date, months) {
+  const next = new Date(date)
+  next.setMonth(next.getMonth() + months)
+  return next
 }
 
 async function seedUserData(userId) {
@@ -659,6 +760,7 @@ async function materializeDueRecurringRules(userId, recurringRows, transactionRo
 
 export async function loadBudgetData(user) {
   await ensureProfile(user)
+  const subscription = await ensureUserSubscription(user.id)
 
   let [
     categoriesResult,
@@ -716,7 +818,7 @@ export async function loadBudgetData(user) {
       .limit(50),
     supabase
       .from("receipts")
-      .select("*")
+      .select("*, receipt_items(*)")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false }),
   ])
@@ -795,6 +897,14 @@ export async function loadBudgetData(user) {
     recurringResult = nextRecurringResult
   }
 
+  if (receiptsResult.error && isSchemaMissing(receiptsResult.error)) {
+    receiptsResult = await supabase
+      .from("receipts")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+  }
+
   const goalRows = optionalRows(goalsResult)
   const contributionRows = optionalRows(contributionsResult)
   let recurringRows = optionalRows(recurringResult)
@@ -813,7 +923,41 @@ export async function loadBudgetData(user) {
     aiInsights: insightRows.map(toAiInsight),
     aiMessages: messageRows.map(toAiMessage),
     receipts: receiptRows.map(toReceipt),
+    subscription,
   }
+}
+
+export async function saveUserSubscription(userId, values) {
+  if (!userId) throw new Error("userId gerekli")
+  const planId = ["free", "standard", "premium"].includes(values.planId) ? values.planId : "free"
+  const billingInterval = ["monthly", "yearly"].includes(values.billingInterval) ? values.billingInterval : "monthly"
+  const now = new Date()
+  const periodMonths = billingInterval === "yearly" ? 12 : 1
+  const periodEnd = addMonths(now, periodMonths)
+
+  const payload = {
+    user_id: userId,
+    plan_id: planId,
+    status: values.status || "active",
+    billing_interval: billingInterval,
+    current_period_start: now.toISOString().slice(0, 10),
+    current_period_end: periodEnd.toISOString().slice(0, 10),
+    cancel_at_period_end: Boolean(values.cancelAtPeriodEnd),
+    provider: values.provider || "manual",
+    updated_at: new Date().toISOString(),
+  }
+
+  const { data, error } = await supabase
+    .from("user_subscriptions")
+    .upsert(payload, { onConflict: "user_id" })
+    .select()
+    .single()
+
+  if (error) {
+    if (isSchemaMissing(error)) throw new Error("Abonelik tablosu hazır değil. Supabase SQL Editor'da supabase/schema.sql dosyasını çalıştırın.")
+    throw error
+  }
+  return toSubscription(data)
 }
 
 export async function saveTransaction(userId, transaction, editId) {
@@ -824,6 +968,14 @@ export async function saveTransaction(userId, transaction, editId) {
   if (!isFinite(amount) || amount < 0) throw new Error("Geçersiz tutar")
   const payload = fromTransaction({ ...transaction, amount }, userId)
   if (editId) {
+    const { data: previousRow, error: previousError } = await supabase
+      .from("transactions")
+      .select("*")
+      .eq("id", editId)
+      .eq("user_id", userId)
+      .maybeSingle()
+    if (previousError && !isSchemaMissing(previousError)) throw previousError
+
     let { data, error } = await supabase
       .from("transactions")
       .update(payload)
@@ -845,6 +997,7 @@ export async function saveTransaction(userId, transaction, editId) {
     }
 
     if (error) throw error
+    await syncCreditCardDebtForTransactionChange(userId, previousRow ? toTransaction(previousRow) : null, toTransaction(data))
     return toTransaction(data)
   }
 
@@ -865,6 +1018,7 @@ export async function saveTransaction(userId, transaction, editId) {
   }
 
   if (error) throw error
+  await syncCreditCardDebtForTransactionChange(userId, null, toTransaction(data))
   return toTransaction(data)
 }
 
@@ -891,6 +1045,14 @@ export async function saveTransactions(userId, transactions) {
 }
 
 export async function deleteTransaction(userId, id) {
+  const { data: previousRow, error: previousError } = await supabase
+    .from("transactions")
+    .select("*")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .maybeSingle()
+  if (previousError && !isSchemaMissing(previousError)) throw previousError
+
   const { error } = await supabase
     .from("transactions")
     .delete()
@@ -898,10 +1060,18 @@ export async function deleteTransaction(userId, id) {
     .eq("user_id", userId)
 
   if (error) throw error
+  await syncCreditCardDebtForTransactionChange(userId, previousRow ? toTransaction(previousRow) : null, null)
 }
 
 export async function deleteTransactions(userId, ids) {
   if (ids.length === 0) return
+  const { data: previousRows, error: previousError } = await supabase
+    .from("transactions")
+    .select("*")
+    .eq("user_id", userId)
+    .in("id", ids)
+  if (previousError && !isSchemaMissing(previousError)) throw previousError
+
   const { error } = await supabase
     .from("transactions")
     .delete()
@@ -909,6 +1079,9 @@ export async function deleteTransactions(userId, ids) {
     .in("id", ids)
 
   if (error) throw error
+  for (const row of previousRows || []) {
+    await syncCreditCardDebtForTransactionChange(userId, toTransaction(row), null)
+  }
 }
 
 export async function updateTransactions(userId, ids, patch) {
@@ -945,6 +1118,46 @@ export async function updateTransactions(userId, ids, patch) {
 
   if (error) throw error
   return (data || []).map(toTransaction)
+}
+
+async function syncCreditCardDebtForTransactionChange(userId, previousTx, nextTx) {
+  const deltas = new Map()
+  const addDelta = (cardId, value) => {
+    if (!cardId || !value) return
+    deltas.set(cardId, (deltas.get(cardId) || 0) + value)
+  }
+
+  if (previousTx?.type === "expense") {
+    addDelta(previousTx.creditCardId, -Number(previousTx.amount || 0))
+  }
+  if (nextTx?.type === "expense") {
+    addDelta(nextTx.creditCardId, Number(nextTx.amount || 0))
+  }
+
+  for (const [cardId, delta] of deltas.entries()) {
+    if (!delta) continue
+    const { data: card, error } = await supabase
+      .from("credit_cards")
+      .select("current_debt")
+      .eq("id", cardId)
+      .eq("user_id", userId)
+      .maybeSingle()
+
+    if (error) {
+      if (isSchemaMissing(error)) return
+      throw error
+    }
+    if (!card) continue
+
+    const nextDebt = Math.max(Number(card.current_debt || 0) + delta, 0)
+    const { error: updateError } = await supabase
+      .from("credit_cards")
+      .update({ current_debt: nextDebt, updated_at: new Date().toISOString() })
+      .eq("id", cardId)
+      .eq("user_id", userId)
+
+    if (updateError && !isSchemaMissing(updateError)) throw updateError
+  }
 }
 
 export async function saveCategory(userId, category, editId) {
@@ -1050,6 +1263,90 @@ export async function updateProfile(userId, values) {
 
   if (error) throw error
   return data
+}
+
+export async function saveAvatarFile(userId, file, currentAvatarPath = "") {
+  if (!file) throw new Error("Dosya seçilmedi.")
+  if (!file.type?.startsWith("image/")) throw new Error("Lütfen bir görsel dosyası seçin.")
+  if (file.size > 5 * 1024 * 1024) throw new Error("Avatar görseli en fazla 5 MB olabilir.")
+
+  const safeName = sanitizeStorageName(file.name || "avatar")
+  const filePath = `${userId}/${Date.now()}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}-${safeName}`
+
+  const upload = await supabase.storage
+    .from("avatars")
+    .upload(filePath, file, {
+      contentType: file.type || undefined,
+      upsert: false,
+    })
+
+  if (upload.error) {
+    throw new Error(
+      upload.error.message?.includes("Bucket not found")
+        ? "Avatar arşivi hazır değil. Supabase SQL Editor'da supabase/schema.sql dosyasını çalıştırın."
+        : upload.error.message
+    )
+  }
+
+  let { data, error } = await supabase
+    .from("profiles")
+    .update({ avatar_url: filePath, updated_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .select(PROFILE_COLS)
+    .single()
+
+  if (error && isSchemaMissing(error)) {
+    await supabase.storage.from("avatars").remove([filePath])
+    throw new Error("Avatar kolonu hazır değil. Supabase SQL Editor'da supabase/schema.sql dosyasını çalıştırın.")
+  }
+  if (error) {
+    await supabase.storage.from("avatars").remove([filePath])
+    throw error
+  }
+
+  if (currentAvatarPath?.startsWith(`${userId}/`) && currentAvatarPath !== filePath) {
+    await supabase.storage.from("avatars").remove([currentAvatarPath])
+  }
+
+  return data
+}
+
+export async function getAvatarUrl(userId, avatarPath) {
+  if (!avatarPath || !userId) return ""
+  if (!avatarPath.startsWith(`${userId}/`)) return avatarPath
+
+  const cacheKey = `${userId}:${avatarPath}`
+  const cached = avatarSignedUrlCache.get(cacheKey)
+  const now = Date.now()
+  if (cached?.url && cached.expiresAt > now) return cached.url
+  if (cached?.promise && cached.expiresAt > now) return cached.promise
+
+  const promise = supabase.storage
+    .from("avatars")
+    .createSignedUrl(avatarPath, AVATAR_SIGNED_URL_EXPIRES_IN_SECONDS)
+    .then(({ data, error }) => {
+      if (error) throw error
+      const signedUrl = data?.signedUrl || ""
+      if (signedUrl) {
+        avatarSignedUrlCache.set(cacheKey, {
+          url: signedUrl,
+          expiresAt: Date.now() + AVATAR_SIGNED_URL_CACHE_TTL_MS,
+        })
+      } else {
+        avatarSignedUrlCache.delete(cacheKey)
+      }
+      return signedUrl
+    })
+    .catch((error) => {
+      avatarSignedUrlCache.delete(cacheKey)
+      throw error
+    })
+
+  avatarSignedUrlCache.set(cacheKey, {
+    promise,
+    expiresAt: now + AVATAR_SIGNED_URL_CACHE_TTL_MS,
+  })
+  return promise
 }
 
 export async function saveGoal(userId, goal, editId) {
@@ -1270,7 +1567,26 @@ export async function saveReceiptFile(userId, file, metadata = {}) {
     throw error
   }
 
-  return toReceipt(data)
+  const receipt = toReceipt(data)
+  const itemRows = Array.isArray(metadata.items)
+    ? metadata.items
+        .map((item) => fromReceiptItem(item, userId, data.id))
+        .filter((item) => item.name)
+    : []
+
+  if (itemRows.length === 0) return receipt
+
+  const itemResult = await supabase
+    .from("receipt_items")
+    .insert(itemRows)
+    .select()
+
+  if (itemResult.error) {
+    if (isSchemaMissing(itemResult.error)) return receipt
+    throw itemResult.error
+  }
+
+  return { ...receipt, items: (itemResult.data || []).map(toReceiptItem) }
 }
 
 export async function linkReceiptToTransaction(userId, receiptId, transactionId) {
@@ -1509,6 +1825,30 @@ const toCreditCard = (row) => ({
   createdAt: row.created_at,
 })
 
+const toCreditCardStatement = (row) => ({
+  id: row.id,
+  creditCardId: row.credit_card_id,
+  periodStart: row.period_start,
+  periodEnd: row.period_end,
+  statementDate: row.statement_date,
+  dueDate: row.due_date,
+  totalAmount: Number(row.total_amount || 0),
+  minPaymentAmount: Number(row.min_payment_amount || 0),
+  paidAmount: Number(row.paid_amount || 0),
+  status: row.status || "open",
+  createdAt: row.created_at,
+})
+
+const toCreditCardPayment = (row) => ({
+  id: row.id,
+  creditCardId: row.credit_card_id,
+  statementId: row.statement_id || "",
+  amount: Number(row.amount || 0),
+  paymentDate: row.payment_date,
+  note: row.note || "",
+  createdAt: row.created_at,
+})
+
 const fromCreditCard = (card, userId) => ({
   user_id: userId,
   name: card.name,
@@ -1524,6 +1864,45 @@ const fromCreditCard = (card, userId) => ({
 })
 
 export async function loadCreditCards(userId) {
+  const data = await loadCreditCardData(userId)
+  return data.creditCards
+}
+
+export async function loadCreditCardData(userId) {
+  const [cardsResult, statementsResult, paymentsResult] = await Promise.all([
+    supabase
+      .from('credit_cards')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_archived', false)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from("credit_card_statements")
+      .select("*")
+      .eq("user_id", userId)
+      .order("statement_date", { ascending: false })
+      .limit(60),
+    supabase
+      .from("credit_card_payments")
+      .select("*")
+      .eq("user_id", userId)
+      .order("payment_date", { ascending: false })
+      .limit(80),
+  ])
+
+  if (cardsResult.error) {
+    if (isSchemaMissing(cardsResult.error)) return { creditCards: [], statements: [], payments: [] }
+    throw cardsResult.error
+  }
+
+  return {
+    creditCards: (cardsResult.data || []).map(toCreditCard),
+    statements: optionalRows(statementsResult).map(toCreditCardStatement),
+    payments: optionalRows(paymentsResult).map(toCreditCardPayment),
+  }
+}
+
+export async function loadCreditCardsLegacy(userId) {
   const { data, error } = await supabase
     .from('credit_cards')
     .select('*')
@@ -1566,4 +1945,95 @@ export async function deleteCreditCard(userId, cardId) {
     .eq('id', cardId)
     .eq('user_id', userId)
   if (error) throw error
+}
+
+export async function saveCreditCardPayment(userId, payment) {
+  const amount = Number(payment.amount)
+  if (!payment.creditCardId) throw new Error("Kart seçilmesi zorunludur.")
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("Geçerli ödeme tutarı girin.")
+
+  let statementId = payment.statementId || null
+  if (!statementId && payment.statementDraft) {
+    const draft = payment.statementDraft
+    const totalAmount = Number(draft.totalAmount || 0)
+    const { data: statement, error: statementError } = await supabase
+      .from("credit_card_statements")
+      .upsert({
+        user_id: userId,
+        credit_card_id: payment.creditCardId,
+        period_start: draft.periodStart,
+        period_end: draft.periodEnd,
+        statement_date: draft.statementDate,
+        due_date: draft.dueDate,
+        total_amount: totalAmount,
+        min_payment_amount: Number(draft.minPaymentAmount || 0),
+        status: "open",
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id,credit_card_id,statement_date" })
+      .select()
+      .single()
+
+    if (statementError) {
+      if (isSchemaMissing(statementError)) throw new Error("Kredi kartı ekstre tablosu hazır değil. Supabase SQL Editor'da supabase/schema.sql dosyasını çalıştırın.")
+      throw statementError
+    }
+    statementId = statement?.id || null
+  }
+
+  const { data, error } = await supabase
+    .from("credit_card_payments")
+    .insert({
+      user_id: userId,
+      credit_card_id: payment.creditCardId,
+      statement_id: statementId,
+      amount,
+      payment_date: payment.paymentDate || new Date().toISOString().slice(0, 10),
+      note: payment.note || null,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    if (isSchemaMissing(error)) throw new Error("Kredi kartı ödeme tablosu hazır değil. Supabase SQL Editor'da supabase/schema.sql dosyasını çalıştırın.")
+    throw error
+  }
+
+  const { data: card } = await supabase
+    .from("credit_cards")
+    .select("current_debt")
+    .eq("id", payment.creditCardId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (card) {
+    await supabase
+      .from("credit_cards")
+      .update({ current_debt: Math.max(Number(card.current_debt || 0) - amount, 0), updated_at: new Date().toISOString() })
+      .eq("id", payment.creditCardId)
+      .eq("user_id", userId)
+  }
+
+  if (statementId) {
+    const { data: statement } = await supabase
+      .from("credit_card_statements")
+      .select("total_amount,paid_amount")
+      .eq("id", statementId)
+      .eq("user_id", userId)
+      .maybeSingle()
+    if (statement) {
+      const paidAmount = Number(statement.paid_amount || 0) + amount
+      const totalAmount = Number(statement.total_amount || 0)
+      await supabase
+        .from("credit_card_statements")
+        .update({
+          paid_amount: paidAmount,
+          status: paidAmount >= totalAmount ? "paid" : "partial",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", statementId)
+        .eq("user_id", userId)
+    }
+  }
+
+  return toCreditCardPayment(data)
 }

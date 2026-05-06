@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react"
 import { S, FONT_BODY, btnPrimary, btnGhost } from "../../constants/theme"
-const BRAND_LOGO_SRC = "/assets/ba_full_png_black.svg"
+const BRAND_LOGO_LIGHT_SRC = "/assets/ba_logo_black.svg"
+const BRAND_LOGO_DARK_SRC = "/assets/ba_logo_white.svg"
 
 
 const PAGES = {
@@ -84,23 +85,14 @@ const PAGES = {
 
 const footerPages = ["privacy", "terms", "security", "contact"]
 
-export default function PublicInfoPage({ page = "privacy", onBackLanding, onLogin, onSignup, onOpenPage }) {
+export default function PublicInfoPage({ page = "privacy", onBackLanding, onLogin, onSignup, onOpenPage, theme = "dark" }) {
   const content = PAGES[page] || PAGES.privacy
   const related = useMemo(() => footerPages.filter((id) => id !== page).slice(0, 3), [page])
+  const brandLogoSrc = theme === "light" ? BRAND_LOGO_LIGHT_SRC : BRAND_LOGO_DARK_SRC
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" })
   }, [page])
-
-  useEffect(() => {
-    const root = document.documentElement
-    const prev = root.getAttribute("data-theme")
-    root.setAttribute("data-theme", "dark")
-    return () => {
-      if (prev) root.setAttribute("data-theme", prev)
-      else root.removeAttribute("data-theme")
-    }
-  }, [])
 
   const openPage = (event, id) => {
     event.preventDefault()
@@ -110,8 +102,8 @@ export default function PublicInfoPage({ page = "privacy", onBackLanding, onLogi
   return (
     <div className="public-page public-info-page" style={{ fontFamily: FONT_BODY }}>
       <nav className="public-nav public-info-nav">
-                <button className="public-brand" onClick={onBackLanding} type="button" aria-label="BudgetAssist">
-        <img className="public-brand-logo" src={BRAND_LOGO_SRC} alt="BudgetAssist" />
+        <button className="public-brand" onClick={onBackLanding} type="button" aria-label="BudgetAssist">
+          <img className="public-brand-logo" src={brandLogoSrc} alt="BudgetAssist" />
         </button>
         <div className="public-nav-links" aria-label="Bilgi sayfalari">
           {footerPages.map((id) => (
