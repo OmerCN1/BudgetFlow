@@ -1,10 +1,16 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:4173",
+  "https://budgetassist.vercel.app",
+]
+
+const corsHeaders = (origin: string | null) => ({
+  "Access-Control-Allow-Origin": allowedOrigins.includes(origin ?? "") ? (origin ?? "") : allowedOrigins[0],
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-}
+})
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -311,7 +317,10 @@ function buildSmsText(displayName: string, items: NotificationItem[], type: "ale
 // ── Main Handler ──────────────────────────────────────────────────────────────
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders })
+  const origin = req.headers.get("origin")
+  const headers = corsHeaders(origin)
+
+  if (req.method === "OPTIONS") return new Response("ok", { headers })
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -322,7 +331,7 @@ serve(async (req) => {
   const twilioFrom = Deno.env.get("TWILIO_FROM_NUMBER") || ""
 
   if (!supabaseUrl || !supabaseServiceKey) {
-    return Response.json({ error: "Supabase service configuration missing" }, { status: 500, headers: corsHeaders })
+    return Response.json({ error: "Supabase service configuration missing" }, { status: 500, headers })
   }
 
   const db = createClient(supabaseUrl, supabaseServiceKey)
@@ -339,7 +348,7 @@ serve(async (req) => {
     const isServiceCall = bearerToken === supabaseServiceKey
 
     if (!bearerToken) {
-      return Response.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders })
+      return Response.json({ error: "Unauthorized" }, { status: 401, headers })
     }
 
     // When called by an authenticated user, extract their user_id
@@ -347,13 +356,13 @@ serve(async (req) => {
     if (!isServiceCall) {
       const { data: { user }, error: userError } = await db.auth.getUser(bearerToken)
       if (userError || !user?.id) {
-        return Response.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders })
+        return Response.json({ error: "Unauthorized" }, { status: 401, headers })
       }
       callerUserId = user?.id || null
     }
 
     if (!isServiceCall && targetUserId && targetUserId !== callerUserId) {
-      return Response.json({ error: "Forbidden" }, { status: 403, headers: corsHeaders })
+      return Response.json({ error: "Forbidden" }, { status: 403, headers })
     }
 
     const effectiveUserId = isServiceCall ? targetUserId : callerUserId
@@ -366,7 +375,7 @@ serve(async (req) => {
     if (effectiveUserId) {
       profileQuery = profileQuery.eq("user_id", effectiveUserId)
     } else if (!isServiceCall) {
-      return Response.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders })
+      return Response.json({ error: "Unauthorized" }, { status: 401, headers })
     }
     // Filter only users who have at least one notification channel enabled
     profileQuery = profileQuery.or("notification_email.eq.true,notification_sms.eq.true")
@@ -449,9 +458,9 @@ serve(async (req) => {
       results[uid] = result
     }
 
-    return Response.json({ ok: true, processed: Object.keys(results).length, results }, { headers: corsHeaders })
+    return Response.json({ ok: true, processed: Object.keys(results).length, results }, { headers })
   } catch (err) {
     console.error("send-notifications error:", err)
-    return Response.json({ error: String(err) }, { status: 500, headers: corsHeaders })
+    return Response.json({ error: String(err) }, { status: 500, headers })
   }
 })

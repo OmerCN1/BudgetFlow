@@ -7,5 +7,12 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setup.js',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html', 'lcov'],
+      include: ['src/utils/**'],
+      exclude: ['src/utils/categorySuggestions.js', 'src/utils/__tests__/**'],
+      thresholds: { lines: 50, functions: 45 },
+    },
   },
 })

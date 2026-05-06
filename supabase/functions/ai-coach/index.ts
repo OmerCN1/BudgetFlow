@@ -1,9 +1,15 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:4173",
+  "https://budgetassist.vercel.app",
+]
+
+const corsHeaders = (origin: string | null) => ({
+  "Access-Control-Allow-Origin": allowedOrigins.includes(origin ?? "") ? (origin ?? "") : allowedOrigins[0],
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-}
+})
 
 const insightSchema = {
   type: "object",
@@ -69,8 +75,11 @@ function buildModelOptions(model: string) {
 }
 
 serve(async (req) => {
+  const origin = req.headers.get("origin")
+  const headers = corsHeaders(origin)
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders })
+    return new Response("ok", { headers })
   }
 
   const apiKey = Deno.env.get("GROQ_API_KEY")
@@ -80,7 +89,7 @@ serve(async (req) => {
         reply: "AI Koç şu an yapılandırılmamış. Supabase Edge Function ortamına GROQ_API_KEY ekleyin.",
         insights: [],
       },
-      { headers: corsHeaders }
+      { headers }
     )
   }
 
@@ -126,7 +135,7 @@ serve(async (req) => {
     if (!outputText) throw new Error("Groq boş yanıt döndürdü.")
     const parsed = JSON.parse(outputText)
 
-    return Response.json(parsed, { headers: corsHeaders })
+    return Response.json(parsed, { headers })
   } catch (error) {
     return Response.json(
       {
@@ -140,7 +149,7 @@ serve(async (req) => {
           },
         ],
       },
-      { headers: corsHeaders, status: 200 }
+      { headers, status: 200 }
     )
   }
 })

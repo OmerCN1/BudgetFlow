@@ -1,9 +1,15 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:4173",
+  "https://budgetassist.vercel.app",
+]
+
+const corsHeaders = (origin: string | null) => ({
+  "Access-Control-Allow-Origin": allowedOrigins.includes(origin ?? "") ? (origin ?? "") : allowedOrigins[0],
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-}
+})
 
 const receiptSchema = {
   type: "object",
@@ -34,15 +40,18 @@ const receiptSchema = {
 }
 
 serve(async (req) => {
+  const origin = req.headers.get("origin")
+  const headers = corsHeaders(origin)
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders })
+    return new Response("ok", { headers })
   }
 
   const apiKey = Deno.env.get("GROQ_API_KEY")
   if (!apiKey) {
     return Response.json(
       { merchant: "", amount: 0, date: "", paymentMethod: "Kart", notes: "GROQ_API_KEY yok.", confidence: 0, items: [] },
-      { headers: corsHeaders }
+      { headers }
     )
   }
 
@@ -107,11 +116,11 @@ Görseldeki fişten şu bilgileri çıkar:
     const payload = await response.json()
     const outputText = payload.choices?.[0]?.message?.content
     if (!outputText) throw new Error("Groq boş yanıt döndürdü.")
-    return Response.json(JSON.parse(outputText), { headers: corsHeaders })
+    return Response.json(JSON.parse(outputText), { headers })
   } catch (error) {
     return Response.json(
       { merchant: "", amount: 0, date: "", paymentMethod: "Kart", notes: error.message || "Fiş okunamadı.", confidence: 0, items: [] },
-      { headers: corsHeaders, status: 200 }
+      { headers, status: 200 }
     )
   }
 })

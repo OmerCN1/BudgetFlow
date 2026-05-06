@@ -140,15 +140,6 @@ export default function App() {
     paymentMethod: "",
   })
 
-  useEffect(() => {
-    const el = document.createElement("link")
-    el.rel = "stylesheet"
-    el.href =
-      "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-    document.head.appendChild(el)
-    return () => el.remove()
-  }, [])
-
   const refreshData = useCallback(async () => {
     if (!user) return
     if (refreshPromiseRef.current) return refreshPromiseRef.current
